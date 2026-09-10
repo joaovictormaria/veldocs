@@ -1,7 +1,14 @@
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { checkHealth } from "@/application/system/check-health";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { createDatabaseHealthProbe } from "@/infrastructure/database/database-health-probe";
+import {
+  createMigrationsHealthProbe,
+  listLocalMigrations,
+} from "@/infrastructure/database/migrations-health-probe";
 import { createPrismaClient } from "@/infrastructure/database/prisma-client";
 import { createTestPrismaClient } from "../support/database";
 
@@ -80,6 +87,44 @@ describe("conexão e migrações", () => {
     }
     // Auditoria aceita eventos sem tenant resolvido (ex.: falha de login).
     expect(nullableByTable.audit_logs).toBe("YES");
+  });
+});
+
+describe("health probe de migrações", () => {
+  const migrationsDir = path.join(process.cwd(), "prisma", "migrations");
+
+  it("reporta up quando todas as migrações do código estão aplicadas", async () => {
+    await expect(checkHealth([createMigrationsHealthProbe(prisma, migrationsDir)])).resolves.toEqual({
+      status: "ok",
+      checks: { migrations: "up" },
+    });
+  });
+
+  it("reporta down quando existe migração no código ainda não aplicada", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "veldocs-migrations-"));
+
+    try {
+      for (const name of await listLocalMigrations(migrationsDir)) {
+        await mkdir(path.join(dir, name));
+      }
+      await mkdir(path.join(dir, "29991231235959_future_migration"));
+
+      await expect(checkHealth([createMigrationsHealthProbe(prisma, dir)])).resolves.toEqual({
+        status: "degraded",
+        checks: { migrations: "down" },
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reporta down quando o diretório de migrações não existe", async () => {
+    const missing = path.join(tmpdir(), "veldocs-migrations-inexistente");
+
+    await expect(checkHealth([createMigrationsHealthProbe(prisma, missing)])).resolves.toEqual({
+      status: "degraded",
+      checks: { migrations: "down" },
+    });
   });
 });
 
