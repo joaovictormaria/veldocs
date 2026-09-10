@@ -1,0 +1,269 @@
+// =============================================================================
+// VELDOCS — Modelo de dados base (FASE 1)
+// -----------------------------------------------------------------------------
+// Multi-tenancy: `Company` é o tenant. Toda entidade empresarial possui
+// `company_id` (equivalente ao tenant_id do MASTER SPEC).
+//
+// Integridade cross-tenant no próprio banco: relações entre entidades de um
+// mesmo tenant usam FKs compostas `(company_id, <fk>) -> (company_id, id)`.
+// Assim o PostgreSQL rejeita, por exemplo, um documento da empresa A apontando
+// para uma categoria, filial, setor ou usuário da empresa B.
+//
+// Regras adicionais aplicadas via SQL na migração inicial:
+//   - audit_logs é append-only (UPDATE/DELETE bloqueados por trigger);
+//   - users.email deve estar normalizado em minúsculas;
+//   - permissions.key deve seguir o formato `recurso.acao`.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum CompanyStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+}
+
+/// Tenant raiz. Nenhum dado empresarial existe fora de uma Company.
+model Company {
+  id        String        @id @default(uuid(7)) @db.Uuid
+  name      String        @db.VarChar(200)
+  legalName String?       @map("legal_name") @db.VarChar(200)
+  /// CNPJ (somente dígitos). Sem unicidade global nesta fase — decisão pendente.
+  taxId     String?       @map("tax_id") @db.VarChar(32)
+  slug      String        @unique @db.VarChar(80)
+  status    CompanyStatus @default(ACTIVE)
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime?     @map("deleted_at") @db.Timestamptz(3)
+
+  branches           Branch[]
+  departments        Department[]
+  users              User[]
+  roles              Role[]
+  userRoles          UserRole[]
+  documentCategories DocumentCategory[]
+  documents          Document[]
+  auditLogs          AuditLog[]
+
+  @@map("companies")
+}
+
+model Branch {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  companyId String    @map("company_id") @db.Uuid
+  name      String    @db.VarChar(200)
+  code      String?   @db.VarChar(40)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  departments Department[]
+  documents   Document[]
+
+  @@unique([companyId, id])
+  @@unique([companyId, code])
+  @@map("branches")
+}
+
+model Department {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  companyId String    @map("company_id") @db.Uuid
+  /// Setor pode ser da empresa inteira (null) ou de uma filial.
+  branchId  String?   @map("branch_id") @db.Uuid
+  name      String    @db.VarChar(200)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branch    Branch?    @relation(fields: [companyId, branchId], references: [companyId, id], onDelete: Restrict)
+  documents Document[]
+
+  @@unique([companyId, id])
+  @@index([companyId, branchId])
+  @@map("departments")
+}
+
+/// Usuário pertence a exatamente uma Company nesta fase.
+/// Credenciais/sessões/MFA serão modelados na FASE 2 (autenticação).
+model User {
+  id          String     @id @default(uuid(7)) @db.Uuid
+  companyId   String     @map("company_id") @db.Uuid
+  /// Normalizado em minúsculas (CHECK no banco). Único globalmente — ver DEC-005.
+  email       String     @unique @db.VarChar(320)
+  name        String     @db.VarChar(200)
+  status      UserStatus @default(INVITED)
+  lastLoginAt DateTime?  @map("last_login_at") @db.Timestamptz(3)
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?  @map("deleted_at") @db.Timestamptz(3)
+
+  company              Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  roles                UserRole[]
+  responsibleDocuments Document[] @relation("DocumentResponsibleUser")
+  createdDocuments     Document[] @relation("DocumentCreatedBy")
+  auditLogs            AuditLog[]
+
+  @@unique([companyId, id])
+  @@map("users")
+}
+
+/// Perfil de acesso (RBAC) sempre escopado ao tenant.
+/// Perfis padrão (OWNER, ADMIN, GESTOR, COLABORADOR, VISUALIZADOR) serão
+/// provisionados por empresa nas fases 2/4 com `isSystem = true`.
+model Role {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  key         String   @db.VarChar(64)
+  name        String   @db.VarChar(120)
+  description String?  @db.VarChar(500)
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@unique([companyId, id])
+  @@unique([companyId, key])
+  @@map("roles")
+}
+
+/// Catálogo GLOBAL de permissões do sistema (não é dado de tenant).
+/// Formato da chave: `recurso.acao` (ex.: documents.read).
+model Permission {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  key         String   @unique @db.VarChar(100)
+  description String?  @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String   @map("role_id") @db.Uuid
+  permissionId String   @map("permission_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+/// Atribuição de perfil a usuário. As FKs compostas garantem que usuário e
+/// perfil pertençam à MESMA empresa.
+model UserRole {
+  companyId String   @map("company_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  roleId    String   @map("role_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  user    User    @relation(fields: [companyId, userId], references: [companyId, id], onDelete: Cascade)
+  role    Role    @relation(fields: [companyId, roleId], references: [companyId, id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([companyId, roleId])
+  @@map("user_roles")
+}
+
+model DocumentCategory {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  /// Subcategoria: referência à categoria pai do mesmo tenant.
+  parentId    String?   @map("parent_id") @db.Uuid
+  name        String    @db.VarChar(120)
+  description String?   @db.VarChar(500)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  company   Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  parent    DocumentCategory?  @relation("DocumentCategoryHierarchy", fields: [companyId, parentId], references: [companyId, id], onDelete: Restrict)
+  children  DocumentCategory[] @relation("DocumentCategoryHierarchy")
+  documents Document[]
+
+  @@unique([companyId, id])
+  @@index([companyId, parentId])
+  @@map("document_categories")
+}
+
+/// Metadados do documento. Arquivos/versões (DocumentVersion) e storage
+/// privado pertencem às fases 5–7 e 13.
+model Document {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  companyId         String    @map("company_id") @db.Uuid
+  categoryId        String?   @map("category_id") @db.Uuid
+  branchId          String?   @map("branch_id") @db.Uuid
+  departmentId      String?   @map("department_id") @db.Uuid
+  responsibleUserId String?   @map("responsible_user_id") @db.Uuid
+  createdById       String?   @map("created_by_id") @db.Uuid
+  title             String    @db.VarChar(255)
+  description       String?
+  issueDate         DateTime? @map("issue_date") @db.Date
+  expirationDate    DateTime? @map("expiration_date") @db.Date
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  company         Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  category        DocumentCategory? @relation(fields: [companyId, categoryId], references: [companyId, id], onDelete: Restrict)
+  branch          Branch?           @relation(fields: [companyId, branchId], references: [companyId, id], onDelete: Restrict)
+  department      Department?       @relation(fields: [companyId, departmentId], references: [companyId, id], onDelete: Restrict)
+  responsibleUser User?             @relation("DocumentResponsibleUser", fields: [companyId, responsibleUserId], references: [companyId, id], onDelete: Restrict)
+  createdBy       User?             @relation("DocumentCreatedBy", fields: [companyId, createdById], references: [companyId, id], onDelete: Restrict)
+
+  @@unique([companyId, id])
+  @@index([companyId, expirationDate])
+  @@index([companyId, categoryId])
+  @@index([companyId, branchId])
+  @@index([companyId, departmentId])
+  @@index([companyId, responsibleUserId])
+  @@index([companyId, createdById])
+  @@map("documents")
+}
+
+/// Trilha de auditoria append-only. `companyId` é opcional para eventos sem
+/// tenant resolvido (ex.: falha de login com e-mail inexistente — FASE 2).
+model AuditLog {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  companyId   String?  @map("company_id") @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  /// Ex.: document.created, user.role_assigned
+  action      String   @db.VarChar(100)
+  entityType  String?  @map("entity_type") @db.VarChar(100)
+  entityId    String?  @map("entity_id") @db.VarChar(100)
+  /// Não armazenar segredos ou conteúdo sensível de documentos aqui.
+  metadata    Json?    @db.JsonB
+  ipAddress   String?  @map("ip_address") @db.VarChar(45)
+  userAgent   String?  @map("user_agent") @db.VarChar(512)
+  requestId   String?  @map("request_id") @db.VarChar(100)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  actorUser User?    @relation(fields: [companyId, actorUserId], references: [companyId, id], onDelete: Restrict)
+
+  @@index([companyId, createdAt])
+  @@index([companyId, entityType, entityId])
+  @@index([companyId, actorUserId])
+  @@map("audit_logs")
+}

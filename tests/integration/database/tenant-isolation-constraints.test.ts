@@ -1,0 +1,141 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import type { PrismaClient } from "@/generated/prisma/client";
+import { createTenantFixture, createTestPrismaClient, truncateAllTables } from "../support/database";
+
+/**
+ * As FKs compostas (company_id, <fk>) → (company_id, id) devem impedir, no
+ * próprio banco, qualquer vínculo entre dados de empresas diferentes.
+ */
+
+type Tenant = Awaited<ReturnType<typeof createTenantFixture>>;
+
+const FOREIGN_KEY_VIOLATION = { code: "P2003" };
+
+let prisma: PrismaClient;
+let a: Tenant;
+let b: Tenant;
+
+beforeAll(() => {
+  prisma = createTestPrismaClient();
+});
+
+beforeEach(async () => {
+  await truncateAllTables(prisma);
+  a = await createTenantFixture(prisma, "a");
+  b = await createTenantFixture(prisma, "b");
+});
+
+afterAll(async () => {
+  await prisma.$disconnect();
+});
+
+describe("documentos", () => {
+  it("aceita documento com vínculos do mesmo tenant", async () => {
+    const document = await prisma.document.create({
+      data: {
+        companyId: a.company.id,
+        title: "Alvará de funcionamento",
+        categoryId: a.category.id,
+        branchId: a.branch.id,
+        departmentId: a.department.id,
+        responsibleUserId: a.user.id,
+        createdById: a.user.id,
+        issueDate: new Date("2026-01-10"),
+        expirationDate: new Date("2027-01-10"),
+      },
+    });
+
+    expect(document.companyId).toBe(a.company.id);
+  });
+
+  it.each([
+    ["categoria", (other: Tenant) => ({ categoryId: other.category.id })],
+    ["filial", (other: Tenant) => ({ branchId: other.branch.id })],
+    ["setor", (other: Tenant) => ({ departmentId: other.department.id })],
+    ["responsável", (other: Tenant) => ({ responsibleUserId: other.user.id })],
+    ["criador", (other: Tenant) => ({ createdById: other.user.id })],
+  ])("rejeita documento da empresa A com %s da empresa B", async (_label, linkTo) => {
+    await expect(
+      prisma.document.create({
+        data: { companyId: a.company.id, title: "Tentativa cross-tenant", ...linkTo(b) },
+      }),
+    ).rejects.toMatchObject(FOREIGN_KEY_VIOLATION);
+
+    expect(await prisma.document.count()).toBe(0);
+  });
+
+  it("rejeita mover documento existente para categoria de outro tenant", async () => {
+    const document = await prisma.document.create({
+      data: { companyId: a.company.id, title: "Contrato social", categoryId: a.category.id },
+    });
+
+    await expect(
+      prisma.document.update({ where: { id: document.id }, data: { categoryId: b.category.id } }),
+    ).rejects.toMatchObject(FOREIGN_KEY_VIOLATION);
+
+    const unchanged = await prisma.document.findUniqueOrThrow({ where: { id: document.id } });
+    expect(unchanged.categoryId).toBe(a.category.id);
+  });
+});
+
+describe("estrutura organizacional", () => {
+  it("rejeita setor da empresa A vinculado a filial da empresa B", async () => {
+    await expect(
+      prisma.department.create({
+        data: { companyId: a.company.id, branchId: b.branch.id, name: "Jurídico" },
+      }),
+    ).rejects.toMatchObject(FOREIGN_KEY_VIOLATION);
+  });
+
+  it("aceita subcategoria com categoria pai do mesmo tenant", async () => {
+    const child = await prisma.documentCategory.create({
+      data: { companyId: a.company.id, parentId: a.category.id, name: "Alvará sanitário" },
+    });
+
+    expect(child.parentId).toBe(a.category.id);
+  });
+
+  it("rejeita subcategoria com categoria pai de outro tenant", async () => {
+    await expect(
+      prisma.documentCategory.create({
+        data: { companyId: a.company.id, parentId: b.category.id, name: "Alvará sanitário" },
+      }),
+    ).rejects.toMatchObject(FOREIGN_KEY_VIOLATION);
+  });
+});
+
+describe("RBAC", () => {
+  it("aceita atribuir perfil do mesmo tenant", async () => {
+    await prisma.userRole.create({
+      data: { companyId: a.company.id, userId: a.user.id, roleId: a.role.id },
+    });
+
+    expect(await prisma.userRole.count({ where: { companyId: a.company.id } })).toBe(1);
+  });
+
+  it("rejeita atribuir a usuário da empresa A um perfil da empresa B", async () => {
+    await expect(
+      prisma.userRole.create({
+        data: { companyId: a.company.id, userId: a.user.id, roleId: b.role.id },
+      }),
+    ).rejects.toMatchObject(FOREIGN_KEY_VIOLATION);
+  });
+
+  it("rejeita atribuição que declara um tenant diferente do usuário", async () => {
+    await expect(
+      prisma.userRole.create({
+        data: { companyId: a.company.id, userId: b.user.id, roleId: a.role.id },
+      }),
+    ).rejects.toMatchObject(FOREIGN_KEY_VIOLATION);
+  });
+});
+
+describe("auditoria", () => {
+  it("rejeita evento da empresa A atribuído a usuário da empresa B", async () => {
+    await expect(
+      prisma.auditLog.create({
+        data: { companyId: a.company.id, actorUserId: b.user.id, action: "document.created" },
+      }),
+    ).rejects.toMatchObject(FOREIGN_KEY_VIOLATION);
+  });
+});
