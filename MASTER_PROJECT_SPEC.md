@@ -1,8 +1,9 @@
 # MASTER PROJECT SPECIFICATION
 ## VELDOCS — SaaS de Gestão Documental Empresarial
 
-**Versão:** 0.2
+**Versão:** 0.3
 **Status:** FASE 0 (Produto) e FASE 1 (Fundação técnica) concluídas — FASE 2 não iniciada
+**Produção:** https://veldocs-app-production.up.railway.app (Railway) — código em `joaovictormaria/veldocs` (GitHub, privado)
 **Documento:** Fonte única de verdade do projeto
 **Última atualização:** 2026-09-10
 
@@ -396,6 +397,8 @@ A autorização deve ser decidida pelo backend. O frontend nunca é autoridade d
 - ✅ CONCLUÍDO — Secrets fora do código: `.env*` ignorados pelo Git (verificado com `git check-ignore`), `.env.example` sem secrets reais, erros de configuração não expõem valores, staging/produção exigem https e rejeitam credenciais locais (testes unitários — passou).
 - ✅ CONCLUÍDO — Código de servidor não importável pelo cliente: `import "server-only"` em `env.ts` e `prisma-client.ts` (`pnpm build` — sucesso).
 - ✅ CONCLUÍDO — Banco local exposto apenas em loopback (`127.0.0.1:5440`, `docker-compose.yml`).
+- ✅ CONCLUÍDO — Banco de produção sem acesso público: o PostgreSQL do Railway não tem TCP proxy nem `DATABASE_PUBLIC_URL`; a aplicação conecta pela rede privada (`postgres.railway.internal`). Evidência: lista de variáveis dos serviços (somente nomes) e log do pre-deploy.
+- ✅ CONCLUÍDO — HTTPS em produção: domínio Railway com TLS; `http://` responde 301 para `https://` (verificado com curl em 2026-09-10). HSTS explícito: FASE 2.
 - 🟡 PARCIAL — Rate limiting, auditoria, storage privado, IA e WhatsApp: somente contratos em `src/application/ports/` (`RateLimiter`, `AuditLogger`, `StorageProvider`, `AiProvider`, `WhatsAppProvider`, `NotificationChannel`); nenhuma implementação.
 
 ## Segurança de API
@@ -1147,7 +1150,7 @@ Objetivo:
 
 # 31. CI/CD E SUPPLY CHAIN
 
-> Scripts locais existem e passam; **não há pipeline de CI** nem repositório remoto nesta etapa.
+> Scripts locais existem e passam. Repositório remoto: GitHub `joaovictormaria/veldocs` (privado), com deploy automático no Railway a cada push em `main`. **Não há pipeline de CI**: hoje o deploy não é bloqueado por lint ou testes.
 
 - 🟡 PARCIAL — Lint (`pnpm lint` local — 0 erros/avisos; sem CI)
 - 🟡 PARCIAL — Type checking (`pnpm typecheck` local — 0 erros; sem CI)
@@ -1160,9 +1163,9 @@ Objetivo:
 - 🔴 NÃO IMPLEMENTADO — SBOM
 - ✅ CONCLUÍDO — Lockfile (`pnpm-lock.yaml`; `pnpm install --frozen-lockfile` — sucesso)
 - 🔴 NÃO IMPLEMENTADO — Imagens de container escaneadas, quando aplicável (não há imagem própria)
-- 🔴 NÃO IMPLEMENTADO — Branch protection (sem repositório remoto)
+- 🔴 NÃO IMPLEMENTADO — Branch protection (repositório existe; proteção da `main` não configurada)
 - 🔴 NÃO IMPLEMENTADO — Revisão de código
-- 🟡 PARCIAL — Ambientes separados (`APP_ENV` development/staging/production validado; infraestrutura de staging/produção não provisionada)
+- 🟡 PARCIAL — Ambientes separados (development local e production no Railway; staging não provisionado)
 
 ---
 
@@ -1629,6 +1632,18 @@ Registrar aqui decisões importantes.
 
 **Pendência:** definir procedimento controlado de retenção/expurgo compatível com LGPD.
 
+## DEC-010 — Hospedagem inicial no Railway
+
+**Status:** 🟡 PARCIAL
+
+**Decisão:** aplicação (`veldocs-app`) e PostgreSQL gerenciado (`Postgres`) no Railway — projeto `veldocs`, ambiente `production`, workspace Velnox.IA — com deploy automático a partir da branch `main` do GitHub.
+
+**Motivo:** publicar rapidamente com banco gerenciado, rede privada entre aplicação e banco e HTTPS automático, mantendo o monólito modular.
+
+**Evidência:** deploy `4f8d54ab` (commit `6dd399d`) — SUCCESS; o pre-deploy aplicou `20260910225812_init_base_entities` no banco de produção; `GET /api/health` → HTTP 200 `{"status":"ok","checks":{"database":"up"}}`. Configuração documentada em `docs/architecture/fundacao-tecnica.md`.
+
+**Pendências:** as configurações de deploy (pre-deploy, start, healthcheck, restart) foram aplicadas pela API do Railway e não estão versionadas — migrar para `.railway/railway.ts` declarando também variáveis e origem do repositório; ambiente de staging; CI antes do deploy; backups do PostgreSQL de produção.
+
 ---
 
 # 42. STATUS GERAL DO PROJETO
@@ -1646,18 +1661,20 @@ WhatsApp:       🔴 NÃO IMPLEMENTADO  (apenas interface)
 IA:             🔴 NÃO IMPLEMENTADO  (apenas interface)
 Billing:        🔴 NÃO IMPLEMENTADO
 Observabilidade:🔴 NÃO IMPLEMENTADO  (apenas /api/health)
+Deploy:         🟡 PARCIAL           (production no Railway com migrações no pre-deploy e healthcheck; sem staging, CI ou backup configurado)
 ```
 
 ## Bloqueadores
 
 - Nenhum bloqueador técnico para iniciar a FASE 2.
 - Decisões pendentes (não bloqueiam a FASE 2): DEC-005 (usuário multiempresa — decidir antes da FASE 4), unicidade de CNPJ entre empresas, retenção de `audit_logs` × LGPD, adoção de RLS.
+- Pendências de infraestrutura (não bloqueiam a FASE 2): CI bloqueando o deploy automático, branch protection, backups do PostgreSQL de produção, ambiente de staging, configuração do Railway versionada como Infrastructure as Code.
 
 ## Última auditoria
 
 **Data:** 2026-09-10
-**Responsável:** Claude Code (auditoria FASE 0 + FASE 1)
-**Versão:** 0.2
+**Responsável:** Claude Code (auditoria FASE 0 + FASE 1 + deploy inicial)
+**Versão:** 0.3
 
 ---
 
@@ -1726,3 +1743,44 @@ Autenticação, sessão, RBAC em runtime, rate limiting, headers de segurança c
 - ESLint 9.39.5 é a linha de manutenção (o npm a sinaliza como deprecated) — manter até `eslint-config-next` suportar ESLint 10.
 - O banner do Prisma CLI sugere atualizar para `latest` (8.0.0-rc.13, pré-lançamento) — ignorar até uma versão estável.
 - `pnpm test:e2e` em modo CI (`CI=1`) usa `pnpm start` e exige `pnpm build` antes.
+
+## 2026-09-10 — Deploy inicial (GitHub + Railway)
+
+Autorizado pelo usuário nesta data.
+
+### O que foi feito
+
+| Item | Resultado |
+|---|---|
+| Autor dos commits | `João Victor Rodrigues Nascimento <176782412+joaovictormaria@users.noreply.github.com>` (configuração local do repositório) |
+| GitHub | repositório privado `joaovictormaria/veldocs`; commits `e86e5dc` (fundação) e `6dd399d` (deploy) em `main` |
+| Railway | projeto `veldocs` (workspace Velnox.IA, conta twomegabrains@gmail.com), ambiente `production`, serviços `veldocs-app` e `Postgres` |
+| Build | Railpack com Node 24.20.0 e pnpm 10.34.3; `pnpm build` concluído |
+| Configuração do serviço | pre-deploy `pnpm db:deploy`, start `pnpm start`, healthcheck `/api/health` (120 s), restart `ON_FAILURE` (5) — aplicada via API e confirmada no manifesto do deploy |
+| Variáveis | `APP_ENV=production`, `APP_URL`, `LOG_LEVEL=info`, `PORT=3000`, `DATABASE_URL` como referência a `${{Postgres.DATABASE_URL}}` |
+| Dependências | `prisma` e `dotenv` movidos para `dependencies` (migrações rodam no container de produção) |
+
+### Verificação em produção
+
+| Verificação | Resultado |
+|---|---|
+| Deploy `4f8d54ab` (commit `6dd399d`) | ✅ SUCCESS |
+| Migrações (log do pre-deploy) | ✅ `20260910225812_init_base_entities` aplicada — "All migrations have been successfully applied." |
+| `GET /api/health` | ✅ HTTP 200 `{"status":"ok","checks":{"database":"up"}}`, `Cache-Control: no-store` |
+| `GET /` | ✅ HTTP 200, título "VELDOCS", texto "Zero surpresa documental." |
+| `X-Powered-By` | ✅ ausente |
+| HTTP → HTTPS | ✅ 301 |
+
+### Problemas encontrados e tratados
+
+- ⚠️ **Primeiro deploy (`d4ec1219`) subiu sem migrações.** O `railway.json` (Config as Code, depreciado pelo Railway) não foi aplicado ao serviço: pre-deploy e healthcheck ficaram nulos. O `/api/health` respondia `ok` porque só verifica a conexão. Corrigido aplicando as configurações via API e removendo o `railway.json`; o deploy seguinte aplicou a migração.
+- ⚠️ **`railway config apply` seria destrutivo.** O arquivo gerado por `railway config migrate` declarava só as configurações de deploy; o plano removeria as 5 variáveis e a conexão com o GitHub. Não foi aplicado; a migração para IaC ficou pendente.
+- ⚠️ **SDK `railway/iac` 3.11.0 falha no Windows** ao verificar a versão do CLI instalado via npm (tenta executar `process.env._` / `railway` sem shell). Contornado apontando `_` para o `railway.exe` apenas para o `plan`; o SDK foi removido do projeto.
+- 🔍 **Verificação por SSH não foi possível:** a chave SSH local não está cadastrada na conta Railway. Não foi cadastrada sem autorização; a comprovação das migrações veio do log do pre-deploy.
+
+### Pendências
+
+- CI (lint, typecheck, testes) antes do deploy automático e branch protection na `main`.
+- Backups e política de retenção do PostgreSQL de produção.
+- Ambiente de staging.
+- Configuração do Railway versionada (`.railway/railway.ts` completo).
