@@ -91,6 +91,32 @@ Arquivos `.env*` são ignorados pelo Git (exceto `.env.example`). Staging e prod
 | `pnpm db:deploy` | `prisma migrate deploy` (staging/produção) |
 | `pnpm db:status` | status das migrações |
 
+## Deploy (Railway)
+
+| Item | Valor |
+|---|---|
+| Projeto / ambiente | `veldocs` / `production` (workspace Velnox.IA) |
+| Serviços | `veldocs-app` (aplicação) e `Postgres` (PostgreSQL gerenciado, acesso só pela rede privada) |
+| Origem | GitHub `joaovictormaria/veldocs`, branch `main` (deploy automático a cada push) |
+| Build | Railpack (Node 24 via `.nvmrc`/`engines`, pnpm via `packageManager`) → `pnpm build` |
+| Pre-deploy | `pnpm db:deploy` (`prisma migrate deploy`) |
+| Start | `pnpm start` (Next.js na porta `PORT=3000`) |
+| Healthcheck | `/api/health`, timeout 120 s |
+| Restart | `ON_FAILURE`, até 5 tentativas |
+| Domínio | https://veldocs-app-production.up.railway.app |
+
+Variáveis do serviço `veldocs-app` (valores ficam somente no Railway):
+
+| Variável | Valor |
+|---|---|
+| `APP_ENV` | `production` |
+| `APP_URL` | `https://veldocs-app-production.up.railway.app` |
+| `LOG_LEVEL` | `info` |
+| `PORT` | `3000` |
+| `DATABASE_URL` | referência `${{Postgres.DATABASE_URL}}` (host interno `postgres.railway.internal`) |
+
+As configurações de deploy (pre-deploy, start, healthcheck, restart) estão aplicadas diretamente no serviço, pela API do Railway. O `railway.json` (Config as Code, depreciado pelo Railway) não era aplicado a este serviço e foi removido. A migração para Infrastructure as Code (`.railway/railway.ts`) está pendente: o arquivo precisa declarar também variáveis e origem do repositório, senão o `railway config apply` as remove.
+
 ## Primeiros passos (desenvolvimento)
 
 ```bash
