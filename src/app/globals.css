@@ -1,6 +1,9 @@
+@import "tailwindcss";
+
 /*
- * Estilo mínimo da fundação (design system completo: pendente).
  * Paleta oficial da marca VELDOCS — ver docs/brand/identidade-visual.md.
+ * Os tokens ficam em :root e são expostos ao Tailwind em @theme, como as cores
+ * `brand-primary`, `brand-dark`, `brand-cyan`, `surface-light` e `surface-dark`.
  */
 :root {
   color-scheme: light dark;
@@ -13,87 +16,19 @@
   /* Superfícies do quadro da marca */
   --surface-light: #fbfafa;
   --surface-dark: #121317;
-
-  /* Tema claro */
-  --bg: var(--surface-light);
-  --fg: #16181d;
-  --muted: #5b616e;
-  --accent: var(--brand-dark);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: var(--surface-dark);
-    --fg: #eceef2;
-    --muted: #a0a6b3;
-    --accent: var(--brand-cyan);
+@theme inline {
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-cyan: var(--brand-cyan);
+  --color-surface-light: var(--surface-light);
+  --color-surface-dark: var(--surface-dark);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-surface-light font-sans text-slate-900 antialiased dark:bg-surface-dark dark:text-slate-100;
   }
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  background: var(--bg);
-  color: var(--fg);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  line-height: 1.5;
-}
-
-.foundation {
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: 18vh 1.5rem 4rem;
-}
-
-.eyebrow {
-  margin: 0 0 1rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.brand-logo {
-  margin: 0 0 2rem;
-  line-height: 0;
-}
-
-.brand-logo img {
-  width: min(100%, 26rem);
-  height: auto;
-}
-
-.logo-dark {
-  display: none;
-}
-
-@media (prefers-color-scheme: dark) {
-  .logo-light {
-    display: none;
-  }
-
-  .logo-dark {
-    display: block;
-  }
-}
-
-.motto {
-  margin: 0 0 0.5rem;
-  font-weight: 600;
-  color: var(--accent);
-}
-
-.value {
-  margin: 0;
-  color: var(--muted);
 }
