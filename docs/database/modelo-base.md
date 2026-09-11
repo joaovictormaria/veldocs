@@ -35,8 +35,11 @@ Fonte da verdade: [`prisma/schema.prisma`](../../prisma/schema.prisma) e [`prism
 | `modules` | **global** | catálogo comercial (MASTER SPEC 2.3); `key` estável usada nos entitlements; `is_core`; `status` AVAILABLE/COMING_SOON/RETIRED; **povoado pela migração** (DEC-023) |
 | `module_dependencies` | **global** | "módulo depende de módulo" (MASTER SPEC 2.6); nenhuma dependência declarada ainda |
 | `module_prices` | **global** | preço por módulo em centavos, com histórico (`valid_from`/`valid_until`); preços iniciais de 2026-09-11 **povoados pela migração**; preço nunca é sobrescrito |
+| `kits` | **global** | kits comerciais (MASTER SPEC 2.7, DEC-024); **povoados pela migração** |
+| `kit_modules` | **global** | módulos incluídos em cada kit; FK para `modules` |
+| `kit_prices` | **global** | preço por kit, com o mesmo histórico e as mesmas regras dos preços de módulo |
 | `company_modules` | tenant | módulo contratado pela empresa (entitlement); PK `(company_id, module_key)`; toda empresa nova nasce com o Core |
-| `subscriptions` | tenant | uma por empresa; estado canônico e datas do trial; `TRIAL_EXPIRING`/`TRIAL_EXPIRED` são derivados do tempo (DEC-022) |
+| `subscriptions` | tenant | uma por empresa; estado canônico e datas do trial; `TRIAL_EXPIRING`/`TRIAL_EXPIRED` são derivados do tempo (DEC-022); `canceled_at`/`suspended_at` contam a retenção de 1 ano / 2 meses (DEC-025) |
 
 ## Isolamento multi-tenant no banco
 
@@ -77,6 +80,8 @@ Isso é **defesa em profundidade** — a autorização server-side por tenant co
 | Vigência em ordem (`valid_until` > `valid_from`) | `module_prices_validity_order_chk` | `module_prices_initial` |
 | Moeda com 3 letras maiúsculas | `module_prices_currency_format_chk` | `module_prices_initial` |
 | Preços iniciais dos 17 módulos | `INSERT` em `module_prices` | `module_prices_initial` |
+| Preço de kit não negativo, vigência em ordem e moeda com 3 letras | `kit_prices_amount_non_negative_chk`, `kit_prices_validity_order_chk`, `kit_prices_currency_format_chk` | `kits_and_subscription_retention` |
+| Os 6 kits, sua composição e preços | `INSERT` em `kits`, `kit_modules` e `kit_prices` | `kits_and_subscription_retention` |
 
 ## Migrações
 
@@ -87,6 +92,7 @@ Isso é **defesa em profundidade** — a autorização server-side por tenant co
 | `20260911021759_mfa_totp_recovery_codes` | segredo TOTP cifrado e códigos de recuperação |
 | `20260911033935_commercial_catalog_and_subscriptions` | `modules`, `module_dependencies`, `module_prices`, `company_modules` e `subscriptions`; povoa o catálogo e dá o Core a toda empresa já existente |
 | `20260911044509_module_prices_initial` | CHECKs de preço e preços mensais iniciais dos 17 módulos (decisão do usuário em 2026-09-11) |
+| `20260911051529_kits_and_subscription_retention` | `kits`, `kit_modules` e `kit_prices` com os 6 kits; coluna `subscriptions.suspended_at` para a retenção |
 
 A preservação de dados da migração `identity_memberships_sessions` foi verificada em 2026-09-11 num banco descartável: migração 1 → dados no formato antigo (pessoas INVITED/ACTIVE/DISABLED, perfil, documento com responsável e criador, auditoria) → migração 2 → vínculos e status corretos, nenhum registro perdido.
 
@@ -94,7 +100,7 @@ Fluxo:
 
 - desenvolvimento: `pnpm db:migrate` (`prisma migrate dev`, interativo). Em ambiente não interativo, gerar o SQL com `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` e revisar;
 - staging/produção: `pnpm db:deploy` (`prisma migrate deploy`) — nunca `migrate dev`/`reset`;
-- testes de integração recriam o schema do banco `*_test` e aplicam `migrate deploy` a cada execução; a limpeza entre testes **preserva** as tabelas povoadas pela migração (`modules`, `module_dependencies`, `module_prices`), senão o cadastro falharia pela FK do Core e os preços reais sumiriam.
+- testes de integração recriam o schema do banco `*_test` e aplicam `migrate deploy` a cada execução; a limpeza entre testes **preserva** as tabelas povoadas pela migração (`modules`, `module_dependencies`, `module_prices`, `kits`, `kit_modules`, `kit_prices`), senão o cadastro falharia pela FK do Core e os preços reais sumiriam.
 
 ## Decisões pendentes
 
@@ -103,4 +109,4 @@ Fluxo:
 - Rotação das chaves `APP_ENCRYPTION_KEY` (formato cifrado já é versionado: `v1.`) e `APP_HMAC_KEY`.
 - Limpeza periódica de `sessions` expiradas e `rate_limit_buckets` vencidos (job).
 - Row-Level Security (RLS) do PostgreSQL como camada adicional de isolamento.
-- Kits: tabela recebida em 2026-09-11; faltam o ajuste do Essencial e a regra de combinação com módulos avulsos.
+- Exclusão de contas após o prazo de retenção (DEC-025): irreversível, depende de autorização explícita; o prazo legal de 1 ano após o cancelamento deve ser confirmado com o jurídico.

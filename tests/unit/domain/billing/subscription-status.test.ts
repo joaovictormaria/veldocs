@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   canTransition,
+  DATA_RETENTION_DAYS,
+  dataRetentionUntil,
   EFFECTIVE_STATUSES,
   effectiveStatus,
   grantsAccess,
   isReactivation,
+  isRetentionExpired,
   SUBSCRIPTION_STATUSES,
   TRIAL_DAYS,
   trialDaysRemaining,
@@ -125,5 +128,42 @@ describe("transições", () => {
     expect(isReactivation("SUSPENDED", "ACTIVE")).toBe(true);
     expect(isReactivation("PAST_DUE", "ACTIVE")).toBe(false);
     expect(isReactivation("TRIALING", "ACTIVE")).toBe(false);
+  });
+});
+
+describe("retenção de dados após cancelamento ou suspensão (DEC-025)", () => {
+  const state = (
+    status: (typeof SUBSCRIPTION_STATUSES)[number],
+    dates: { canceledAt?: Date | null; suspendedAt?: Date | null } = {},
+  ) => ({ status, canceledAt: dates.canceledAt ?? null, suspendedAt: dates.suspendedAt ?? null });
+
+  it("cancelada: dados e login guardados por 1 ano", () => {
+    expect(DATA_RETENTION_DAYS.CANCELED).toBe(365);
+    expect(dataRetentionUntil(state("CANCELED", { canceledAt: start }))?.toISOString()).toBe(at(365).toISOString());
+  });
+
+  it("suspensa: dados guardados por 2 meses (60 dias)", () => {
+    expect(DATA_RETENTION_DAYS.SUSPENDED).toBe(60);
+    expect(dataRetentionUntil(state("SUSPENDED", { suspendedAt: start }))?.toISOString()).toBe(at(60).toISOString());
+  });
+
+  it("sem a data de início não há prazo, e os demais estados não têm retenção", () => {
+    expect(dataRetentionUntil(state("CANCELED"))).toBeNull();
+    expect(dataRetentionUntil(state("SUSPENDED"))).toBeNull();
+    expect(dataRetentionUntil(state("ACTIVE", { canceledAt: start, suspendedAt: start }))).toBeNull();
+    expect(dataRetentionUntil(state("TRIALING"))).toBeNull();
+  });
+
+  it("o prazo vence no instante final — só então a conta pode ser apagada", () => {
+    const suspended = state("SUSPENDED", { suspendedAt: start });
+
+    expect(isRetentionExpired(suspended, at(59.99))).toBe(false);
+    expect(isRetentionExpired(suspended, at(60))).toBe(true);
+    expect(isRetentionExpired(state("ACTIVE"), at(1000))).toBe(false);
+  });
+
+  it("guardar os dados não libera acesso: cancelada e suspensa seguem bloqueadas", () => {
+    expect(grantsAccess("CANCELED")).toBe(false);
+    expect(grantsAccess("SUSPENDED")).toBe(false);
   });
 });

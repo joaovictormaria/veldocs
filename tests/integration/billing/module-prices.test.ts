@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createCatalogQueries } from "@/application/billing/catalog-queries";
+import { KIT_CATALOG } from "@/domain/billing/kit-catalog";
 import { MODULE_KEYS } from "@/domain/billing/module-catalog";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { createPrismaBillingCatalogRepository } from "@/infrastructure/database/prisma-billing-catalog-repository";
@@ -26,6 +27,16 @@ const PRECOS_INICIAIS = {
   "modo-auditoria": 3990,
 };
 
+/** Kits enviados pelo usuário em 2026-09-11 (R$/mês, em centavos). */
+const PRECOS_KITS = {
+  essencial: 6990,
+  gestao: 12990,
+  inteligencia: 19990,
+  comunicacao: 11990,
+  "controle-avancado": 16990,
+  complete: 39990,
+};
+
 const MINUTE = 60 * 1000;
 const DAY = 24 * 60 * MINUTE;
 const now = new Date("2026-09-11T12:00:00.000Z");
@@ -45,6 +56,7 @@ afterAll(async () => {
 });
 
 const repository = () => createPrismaBillingCatalogRepository(prisma);
+const queries = () => createCatalogQueries({ repository: repository(), now: () => now });
 
 const priceOf = async (key: string, at: Date) =>
   (await repository().listCatalog(at)).find((entry) => entry.key === key)?.monthlyPriceCents;
@@ -107,35 +119,99 @@ describe("preços iniciais dos módulos", () => {
 });
 
 describe("orçamento mensal com os preços reais", () => {
-  const quotes = () => createCatalogQueries({ repository: repository(), now: () => now });
-
-  it("só o Core: R$ 49,90", async () => {
-    await expect(quotes().quote([])).resolves.toEqual({
+  it("só o Core: R$ 49,90, sem sugestão de kit", async () => {
+    await expect(queries().quote([])).resolves.toEqual({
       modules: ["core"],
       totalCents: 4990,
       unpriced: [],
       unknown: [],
+      suggestion: null,
     });
   });
 
   it("Core + Controle de vencimentos + WhatsApp: R$ 129,70", async () => {
-    const quote = await quotes().quote(["vencimentos", "whatsapp"]);
+    const quote = await queries().quote(["vencimentos", "whatsapp"]);
 
     expect(quote.modules).toEqual(["core", "vencimentos", "whatsapp"]);
     expect(quote.totalCents).toBe(12970);
   });
 
-  it("todos os 17 módulos: R$ 638,30", async () => {
-    const quote = await quotes().quote([...MODULE_KEYS]);
-
-    expect(quote.totalCents).toBe(63830);
-    expect(quote.unpriced).toEqual([]);
-  });
-
   it("chave inexistente é apontada e não entra no total", async () => {
-    const quote = await quotes().quote(["modulo-inventado"]);
+    const quote = await queries().quote(["modulo-inventado"]);
 
     expect(quote.unknown).toEqual(["modulo-inventado"]);
     expect(quote.totalCents).toBe(4990);
+  });
+});
+
+describe("kits no banco", () => {
+  it("os kits da migração correspondem ao domínio, com os preços da tabela do usuário", async () => {
+    const kits = await repository().listKits(now);
+
+    expect(kits.map(({ key, name, audience, modules }) => ({ key, name, audience, modules }))).toEqual(
+      KIT_CATALOG.map(({ key, name, audience, modules }) => ({ key, name, audience, modules: [...modules] })),
+    );
+    expect(Object.fromEntries(kits.map((kit) => [kit.key, kit.monthlyPriceCents]))).toEqual(PRECOS_KITS);
+    expect(new Set(kits.map((kit) => kit.currency))).toEqual(new Set(["BRL"]));
+  });
+
+  it("a limpeza entre testes não apaga kits nem seus preços", async () => {
+    await truncateAllTables(prisma);
+
+    expect(await prisma.kit.count()).toBe(KIT_CATALOG.length);
+    expect(await prisma.kitPrice.count()).toBe(KIT_CATALOG.length);
+  });
+
+  it("o banco recusa kit com módulo fora do catálogo e preço de kit negativo", async () => {
+    await expect(
+      prisma.kitModule.create({ data: { kitKey: "essencial", moduleKey: "modulo-inventado" } }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.kitPrice.create({ data: { kitKey: "essencial", amountCents: -1, validFrom: now } }),
+    ).rejects.toThrow();
+
+    expect(await prisma.kitPrice.count()).toBe(KIT_CATALOG.length);
+  });
+});
+
+describe("kits no orçamento (DEC-024)", () => {
+  it("kit + módulo avulso: Gestão + Contratos = R$ 169,80, sem cobrar de novo o que está no kit", async () => {
+    const quote = await queries().quoteKit("gestao", ["contratos", "vencimentos"]);
+
+    expect(quote).toMatchObject({ kitCents: 12990, extras: ["contratos"], extrasCents: 3990, totalCents: 16980 });
+  });
+
+  it("sugere o Gestão para os mesmos módulos avulsos: R$ 159,50 → R$ 129,90", async () => {
+    const quote = await queries().quote(["vencimentos", "funcionarios", "fornecedores", "solicitacoes"]);
+
+    expect(quote.totalCents).toBe(15950);
+    expect(quote.suggestion).toEqual({ kitKey: "gestao", totalCents: 12990, savingsCents: 2960 });
+  });
+
+  it("sugere kit com módulo a mais quando fica mais barato: Inteligência sem o Radar, R$ 219,50 → R$ 199,90", async () => {
+    const quote = await queries().quote(["analise-documentos", "assistente-ia", "ocr", "score-documental"]);
+
+    expect(quote.totalCents).toBe(21950);
+    expect(quote.suggestion).toEqual({ kitKey: "inteligencia", totalCents: 19990, savingsCents: 1960 });
+  });
+
+  it("todos os módulos: sugere o Complete, com economia de R$ 238,40", async () => {
+    const quote = await queries().quote([...MODULE_KEYS]);
+
+    expect(quote.totalCents).toBe(63830);
+    expect(quote.suggestion).toEqual({ kitKey: "complete", totalCents: 39990, savingsCents: 23840 });
+  });
+
+  it("Core + Vencimentos não sugere o Essencial, que o usuário manteve R$ 0,10 acima do avulso", async () => {
+    const individual = await queries().quote(["vencimentos"]);
+    const essencial = await queries().quoteKit("essencial", []);
+
+    expect(individual.totalCents).toBe(6980);
+    expect(essencial?.totalCents).toBe(6990);
+    expect(individual.suggestion).toBeNull();
+  });
+
+  it("kit inexistente não gera orçamento", async () => {
+    await expect(queries().quoteKit("kit-inventado", [])).resolves.toBeNull();
   });
 });

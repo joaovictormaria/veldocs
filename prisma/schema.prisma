@@ -442,6 +442,7 @@ model Module {
   requiredBy     ModuleDependency[] @relation("ModuleRequiredBy")
   prices         ModulePrice[]
   companyModules CompanyModule[]
+  kits           KitModule[]
 
   @@map("modules")
 }
@@ -507,7 +508,10 @@ model Subscription {
   trialEndsAt      DateTime?          @map("trial_ends_at") @db.Timestamptz(3)
   /// Fim do período pago corrente.
   currentPeriodEnd DateTime?          @map("current_period_end") @db.Timestamptz(3)
+  /// Início do cancelamento: conta 1 ano de retenção dos dados (DEC-025).
   canceledAt       DateTime?          @map("canceled_at") @db.Timestamptz(3)
+  /// Início da suspensão: conta 2 meses de retenção dos dados (DEC-025).
+  suspendedAt      DateTime?          @map("suspended_at") @db.Timestamptz(3)
   /// Preenchido quando uma assinatura cancelada/suspensa volta a valer (2.9).
   reactivatedAt    DateTime?          @map("reactivated_at") @db.Timestamptz(3)
   createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -518,4 +522,54 @@ model Subscription {
   @@index([status])
   @@index([trialEndsAt])
   @@map("subscriptions")
+}
+
+/// Kit comercial (MASTER SPEC 2.7): camada opcional sobre os módulos, que
+/// pode ser combinada com módulos avulsos (DEC-024).
+model Kit {
+  key       String   @id @db.VarChar(60)
+  name      String   @db.VarChar(120)
+  /// "Indicado para".
+  audience  String   @db.VarChar(255)
+  /// Ordem de exibição no Builder.
+  sortOrder Int      @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  modules KitModule[]
+  prices  KitPrice[]
+
+  @@map("kits")
+}
+
+/// Módulo incluído em um kit.
+model KitModule {
+  kitKey    String @map("kit_key") @db.VarChar(60)
+  moduleKey String @map("module_key") @db.VarChar(60)
+
+  kit    Kit    @relation(fields: [kitKey], references: [key], onDelete: Cascade)
+  module Module @relation(fields: [moduleKey], references: [key], onDelete: Restrict)
+
+  @@id([kitKey, moduleKey])
+  @@index([moduleKey])
+  @@map("kit_modules")
+}
+
+/// Preço de kit, com o mesmo histórico dos preços de módulo: um preço novo
+/// encerra o anterior com `valid_until` em vez de sobrescrevê-lo.
+model KitPrice {
+  id            String        @id @default(uuid(7)) @db.Uuid
+  kitKey        String        @map("kit_key") @db.VarChar(60)
+  /// Em centavos.
+  amountCents   Int           @map("amount_cents")
+  currency      String        @default("BRL") @db.VarChar(3)
+  billingPeriod BillingPeriod @default(MONTHLY) @map("billing_period")
+  validFrom     DateTime      @map("valid_from") @db.Timestamptz(3)
+  validUntil    DateTime?     @map("valid_until") @db.Timestamptz(3)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  kit Kit @relation(fields: [kitKey], references: [key], onDelete: Restrict)
+
+  @@index([kitKey, validFrom])
+  @@map("kit_prices")
 }
