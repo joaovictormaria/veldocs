@@ -1,6 +1,6 @@
 /**
  * Porta do provedor WhatsApp Business API.
- * Somente contrato — implementação prevista a partir da FASE 30.
+ * Somente contrato — implementação prevista para a FASE 15 (WhatsApp).
  *
  * Regras de segurança:
  * - webhooks só são processados após validação de assinatura;

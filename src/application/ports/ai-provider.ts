@@ -2,9 +2,9 @@ import type { TenantContext } from "@/domain/shared/tenant-context";
 
 /**
  * Porta do provedor de IA, desacoplada de fornecedor específico.
- * Somente contrato — implementação prevista a partir da FASE 25.
+ * Somente contrato — implementação prevista para a FASE 13 (IA e OCR).
  *
- * Regras de segurança (DEC-003):
+ * Regras de segurança (DEC-005 — IA via tools autorizadas):
  * - a IA NUNCA acessa o banco diretamente; recebe apenas dados já autorizados
  *   por serviços da aplicação (usuário → tenant → permissão → recurso → ação);
  * - conteúdo de documentos é dado NÃO CONFIÁVEL (risco de prompt injection);

@@ -1,6 +1,6 @@
 /**
  * Porta de Object Storage PRIVADO (compatível com S3/R2).
- * Somente contrato — implementação prevista para a FASE 6.
+ * Somente contrato — implementação prevista para a FASE 5 (storage e upload seguro).
  *
  * Regras que toda implementação deve respeitar:
  * - bucket privado, sem listagem pública;

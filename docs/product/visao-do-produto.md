@@ -1,26 +1,26 @@
 # VELDOCS — Visão do produto (FASE 0)
 
-> Documento derivado do `MASTER_PROJECT_SPEC.md` (seções 1 e 2). Em caso de divergência, o MASTER SPEC prevalece.
+> Documento derivado do `MASTER_PROJECT_SPEC.md` v0.2 (seções 1 e 2). Em caso de divergência, o MASTER SPEC prevalece.
 
-## Nome e identidade
+## Nome, marca e identidade
 
-- **Nome:** VELDOCS
-- **Descrição curta:** Gestão inteligente de documentos empresariais.
+- **Produto:** VELDOCS — gestão documental empresarial.
+- **Ecossistema:** VELNOX.IA (empresa). O VELDOCS tem identidade visual própria, conectada à família VELNOX, sem depender da identidade do VELNOX.APP.
+- **Assinatura:** Gestão inteligente de documentos empresariais.
 - **Conceito:** **Zero surpresa documental.**
+- **Identidade visual (logo e cor padrão):** pendente — aguardando os arquivos definidos pelo usuário.
 
 ## Propósito
 
-Ser um SaaS B2B para empresas organizarem, monitorarem e controlarem documentos empresariais, seus responsáveis, prazos, pendências e processos de renovação.
-
-O VELDOCS não é apenas um repositório de PDFs: é um assistente operacional da documentação empresarial — organiza, monitora, alerta, explica riscos, sugere ações e, quando autorizado, executa tarefas.
+SaaS B2B para empresas organizarem, monitorarem e controlarem documentos empresariais, responsáveis, prazos, pendências e processos de renovação — evoluindo de gerenciador documental para **assistente operacional da documentação empresarial**.
 
 ## Problema
 
-Empresas controlam documentos com uma combinação de pastas locais, Google Drive/OneDrive, e-mail, WhatsApp, planilhas e lembretes manuais. O resultado é desorganização, atrasos, perda de documentos e falta de visibilidade sobre vencimentos.
+Documentação dispersa entre pastas locais, Google Drive/OneDrive, e-mail, WhatsApp, planilhas, lembretes manuais e processos não padronizados, causando desorganização, atrasos, perda de documentos e falta de visibilidade sobre vencimentos.
 
 ## Público-alvo inicial
 
-Pequenas e médias empresas que precisam controlar documentos próprios, de funcionários, fornecedores e contratos, sem a complexidade de uma plataforma corporativa.
+Pequenas e médias empresas que precisam controlar documentos próprios, de funcionários, fornecedores e contratos, sem uma plataforma corporativa excessivamente complexa.
 
 ## Proposta de valor
 
@@ -28,27 +28,36 @@ Pequenas e médias empresas que precisam controlar documentos próprios, de func
 
 ## "Zero surpresa documental"
 
-Nenhum vencimento, pendência ou risco documental deve ser descoberto tarde demais. O sistema deve **perceber → alertar → explicar → recomendar → (quando autorizado) executar**.
+Nenhum vencimento, pendência ou risco documental deve ser descoberto tarde demais: o sistema **percebe → alerta → explica → recomenda → (quando autorizado) executa**.
 
-## Escopo inicial do MVP
+## Experiência
 
-Ordem do roadmap: Empresa → Usuários → Permissões → Documentos → Storage → Vencimentos → Alertas → Dashboard → Auditoria → Versionamento.
-
-| Incluído no MVP | Fora do MVP (V2/V3/maduro) |
+| Canal | Papel |
 |---|---|
-| Empresa, filiais e setores | Funcionários e fornecedores |
-| Usuários e autenticação | Contratos |
-| RBAC / permissões | Solicitações, aprovações e portal externo |
-| Multi-tenancy | Automações, calendário e relatórios |
-| Documentos e categorias | IA, OCR e extração de dados |
-| Upload seguro e storage privado | WhatsApp |
-| Pesquisa | Score documental e radar de risco |
-| Vencimentos e alertas | Billing e assinatura |
-| Dashboard | Painel administrativo do SaaS |
-| Auditoria/histórico | Integrações externas |
-| Versionamento | |
+| Dashboard | administração e gestão completa |
+| WhatsApp | consultas e ações rápidas |
+| IA | interpretação, orientação e automação assistida |
 
-## Canais
+## Modelo comercial modular
 
-- **MVP:** dashboard web.
-- **Futuro:** WhatsApp, portal externo, automações e notificações multicanal.
+> **Monte o VELDOCS que sua empresa precisa.**
+
+```text
+Cadastro → VELDOCS Builder → seleção de módulos → preço mensal em tempo real
+        → 14 dias grátis → uso → assinatura ou bloqueio controlado
+```
+
+- **Core obrigatório** (preço-base, não removível): empresa, usuários, autenticação, permissões, multi-tenancy, gestão documental, storage e dashboard básico.
+- **Módulos adicionais** com preço próprio: vencimentos, funcionários, fornecedores, contratos, solicitações, aprovações, automação, análise inteligente, assistente IA, WhatsApp, portal de terceiros, relatórios avançados, OCR, score, radar de risco e modo auditoria.
+- **Regras no backend:** catálogo, preço vigente, moeda, período, dependências, limites, entitlement e status de cada módulo. O frontend só apresenta o que o servidor calcula e valida.
+- **Kits** com desconto como camada opcional sobre a compra modular.
+- **Trial de 14 dias** com estado próprio no backend (`TRIAL_ACTIVE`, `TRIAL_EXPIRING`, `TRIAL_EXPIRED`, `ACTIVE`, `PAYMENT_PENDING`, `PAST_DUE`, `CANCELED`, `SUSPENDED`, `REACTIVATED`). Ao expirar sem assinatura, a conta entra em estado controlado e os dados não são apagados.
+- **Upsell contextual**, explicável e opcional, sem dark patterns.
+
+Os preços reais serão definidos comercialmente; o sistema nasce preparado para preço por módulo.
+
+## Escopo do MVP funcional
+
+Empresa, usuários, autenticação, RBAC/permissões, multi-tenancy, Core modular, catálogo e entitlements de módulos, documentos, categorias, upload seguro, storage privado, pesquisa, vencimentos, alertas, dashboard, auditoria/histórico, versionamento, Builder de módulos, trial de 14 dias e estados de assinatura/trial.
+
+Fora do MVP: V2 (funcionários, fornecedores, solicitações, aprovações, portal externo, contratos, automações, calendário, relatórios, recomendação contextual), V3 (IA, OCR, extração, inconsistências, duplicidades, score, radar, WhatsApp, resumos, zero digitação, assistente proativo, modo auditoria) e produto maduro (billing completo, painel administrativo, observabilidade, escala, integrações, marketplace).

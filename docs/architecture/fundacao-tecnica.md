@@ -27,7 +27,7 @@ veldocs/
 ├── src/
 │   ├── app/                  # PRESENTATION (entrada): rotas Next.js, layouts, route handlers.
 │   │                         #   Rotas são finas e fazem a composição (injetam infraestrutura em casos de uso).
-│   ├── presentation/         # PRESENTATION: componentes/conteúdo de UI reutilizável (design system na FASE 3)
+│   ├── presentation/         # PRESENTATION: componentes/conteúdo de UI reutilizável (design system: pendente)
 │   ├── application/          # APPLICATION: casos de uso e portas (interfaces)
 │   │   ├── ports/            #   Storage, IA, WhatsApp, notificações, auditoria, rate limit, health
 │   │   └── system/           #   caso de uso de health check
@@ -154,7 +154,7 @@ As configurações de deploy (pre-deploy, start, healthcheck, restart) estão ap
 ### Modelo
 
 - `users` é a **pessoa** (identidade global): e-mail único, CPF opcional e senha. A pessoa **não pertence** a uma empresa.
-- `memberships` é o **vínculo** pessoa ↔ empresa (`INVITED`, `ACTIVE`, `SUSPENDED`). Uma pessoa pode estar em várias empresas (DEC-005).
+- `memberships` é o **vínculo** pessoa ↔ empresa (`INVITED`, `ACTIVE`, `SUSPENDED`). Uma pessoa pode estar em várias empresas (DEC-009).
 - Perfis (`user_roles`), responsável/criador de documento, autor de auditoria e empresa ativa da sessão referenciam o vínculo `(company_id, user_id)`: o banco rejeita quem não é membro da empresa.
 - **CPF** nunca é gravado em claro: `cpf_lookup_hash` = HMAC-SHA256 (busca e unicidade) e `cpf_encrypted` = AES-256-GCM com contexto autenticado `users.cpf`.
 - **Senha**: Argon2id (19 MiB, 2 iterações, paralelismo 1); mínimo de 12 e máximo de 128 caracteres, sem regras de composição.
@@ -192,7 +192,9 @@ Eventos auditados: `auth.account_registered`, `company.created`, `auth.login_suc
 
 ### Pendente na FASE 2
 
-Empresa ativa e verificação de permissões (RBAC) nas rotas de negócio; MFA obrigatório para OWNER/ADMIN (app autenticador + códigos de recuperação); link mágico e recuperação de senha (serviço de e-mail a definir); login com Google; headers de segurança (CSP, HSTS) e logs estruturados; rotação de chaves.
+Empresa ativa e verificação de permissões (RBAC) nas rotas de negócio, já preparada para a verificação de entitlement do módulo (MASTER SPEC v0.2: tenant → RBAC → entitlement → recurso); MFA obrigatório para OWNER/ADMIN (app autenticador + códigos de recuperação); verificação de e-mail (obrigatória no MASTER SPEC v0.2), link mágico e recuperação de senha (serviço de e-mail a definir); login com Google; headers de segurança (CSP, HSTS) e logs estruturados; rotação de chaves.
+
+Com o modelo modular (MASTER SPEC v0.2), o cadastro deverá levar ao **VELDOCS Builder** e o trial de 14 dias começará após a escolha dos módulos — isso pertence à FASE 3 (catálogo de módulos, entitlements, Builder, preço e trial).
 
 ## Primeiros passos (desenvolvimento)
 
