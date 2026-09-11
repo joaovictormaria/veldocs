@@ -1,18 +1,32 @@
-/* Estilo mínimo da fundação. O design system pertence à FASE 3. */
+/*
+ * Estilo mínimo da fundação (design system completo: pendente).
+ * Paleta oficial da marca VELDOCS — ver docs/brand/identidade-visual.md.
+ */
 :root {
   color-scheme: light dark;
-  --bg: #f7f7f5;
+
+  /* Marca */
+  --brand-primary: #3d5afe; /* Azul principal */
+  --brand-dark: #2541b2; /* Azul escuro */
+  --brand-cyan: #00e5ff; /* Ciano */
+
+  /* Superfícies do quadro da marca */
+  --surface-light: #fbfafa;
+  --surface-dark: #121317;
+
+  /* Tema claro */
+  --bg: var(--surface-light);
   --fg: #16181d;
   --muted: #5b616e;
-  --accent: #1f4fd1;
+  --accent: var(--brand-dark);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1115;
+    --bg: var(--surface-dark);
     --fg: #eceef2;
     --muted: #a0a6b3;
-    --accent: #7aa2ff;
+    --accent: var(--brand-cyan);
   }
 }
 
@@ -49,15 +63,28 @@ body {
   color: var(--muted);
 }
 
-h1 {
-  margin: 0;
-  font-size: clamp(2.5rem, 8vw, 4rem);
-  letter-spacing: -0.02em;
+.brand-logo {
+  margin: 0 0 2rem;
+  line-height: 0;
 }
 
-.tagline {
-  margin: 0.5rem 0 2rem;
-  font-size: 1.25rem;
+.brand-logo img {
+  width: min(100%, 26rem);
+  height: auto;
+}
+
+.logo-dark {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .logo-light {
+    display: none;
+  }
+
+  .logo-dark {
+    display: block;
+  }
 }
 
 .motto {
