@@ -1,3 +1,4 @@
+import type { AccessControlRepository, EntitlementService, MembershipAccess } from "@/application/ports/access-control";
 import type { AuditEvent, AuditLogger } from "@/application/ports/audit-logger";
 import type {
   IdentityRepository,
@@ -45,6 +46,10 @@ export function createInMemorySessions() {
     async extend(id, expiresAt, seenAt) {
       const row = rows.get(id);
       if (row && !row.revokedAt) rows.set(id, { ...row, expiresAt, lastSeenAt: seenAt });
+    },
+    async setActiveCompany(id, companyId) {
+      const row = rows.get(id);
+      if (row && !row.revokedAt) rows.set(id, { ...row, activeCompanyId: companyId });
     },
     async revoke(id, at) {
       const row = rows.get(id);
@@ -97,6 +102,38 @@ export function createFakeAudit() {
     },
   };
   return { audit, events };
+}
+
+export function createFakeAccess() {
+  const grants = new Map<string, MembershipAccess>();
+  const lookups: string[] = [];
+  const repository: AccessControlRepository = {
+    async findMembershipAccess(userId, companyId) {
+      lookups.push(`${userId}@${companyId}`);
+      return grants.get(`${userId}@${companyId}`) ?? null;
+    },
+  };
+  const grant = (userId: string, companyId: string, access: Partial<MembershipAccess> = {}) => {
+    grants.set(`${userId}@${companyId}`, {
+      membershipStatus: "ACTIVE",
+      companyActive: true,
+      roleKeys: ["OWNER"],
+      permissions: ["company.read", "members.read"],
+      ...access,
+    });
+  };
+  return { repository, grant, lookups };
+}
+
+export function createFakeEntitlements(enabled = true) {
+  const checks: string[] = [];
+  const service: EntitlementService = {
+    async isModuleEnabled(companyId, moduleKey) {
+      checks.push(`${companyId}:${moduleKey}`);
+      return enabled;
+    },
+  };
+  return { service, checks };
 }
 
 export const fakeProtector: SensitiveDataProtector = {

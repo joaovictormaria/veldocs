@@ -168,6 +168,10 @@ As configurações de deploy (pre-deploy, start, healthcheck, restart) estão ap
 | `POST /api/auth/logout` | revoga a sessão atual e apaga o cookie | `204` |
 | `POST /api/auth/logout-all` | revoga todas as sessões da pessoa | `204`, `401` |
 | `GET /api/auth/session` | pessoa, empresa ativa e vínculos com perfis | `200`, `401` |
+| `POST /api/auth/active-company` | define a empresa ativa da sessão (`{ companyId }`) | `200`, `400`, `401`, `404 company_not_available` (idêntico para empresa inexistente, sem vínculo ou suspensa) |
+| `GET /api/company` | empresa ativa (`company.read`) | `200`, `401`, `403` |
+| `GET /api/company/members` | membros da empresa ativa (`members.read`) | `200`, `401`, `403` |
+| `GET /api/company/members/[userId]` | um membro da empresa ativa (`members.read`) | `200`, `401`, `403`, `404` (idêntico para outra empresa, inexistente ou id inválido) |
 
 Rotas que alteram estado exigem `Origin` igual a `APP_URL` (ou `Sec-Fetch-Site: same-origin`) e corpo `application/json` de até 16 KB.
 
@@ -190,9 +194,31 @@ Implementação em PostgreSQL (`rate_limit_buckets`, UPSERT atômico); substitu�
 
 Eventos auditados: `auth.account_registered`, `company.created`, `auth.login_succeeded`, `auth.login_failed`, `auth.login_rate_limited`, `auth.register_rate_limited`, `auth.logout`, `auth.logout_all`. Metadados nunca contêm senha, token, e-mail digitado ou CPF.
 
+### Autorização nas rotas (FASE 2 — parte 2)
+
+Toda rota de negócio chama `authorizeRequest(permissão)` (`src/infrastructure/http/authorization.ts`) **antes** de qualquer consulta. A cadeia (`src/application/access/authorize.ts`) segue o MASTER SPEC:
+
+```text
+sessão válida → pessoa ativa → empresa ativa na sessão → vínculo ACTIVE em empresa ACTIVE
+  → permissão do perfil (união dos perfis do vínculo) → entitlement do módulo da permissão → recurso
+```
+
+| Falha | Resposta |
+|---|---|
+| sem sessão / sessão inválida / pessoa desativada | `401 unauthenticated` |
+| sessão sem empresa ativa (pessoa com mais de um vínculo) | `403 active_company_required` |
+| sem vínculo ativo, empresa suspensa ou permissão ausente | `403 forbidden` |
+| módulo da permissão não ativo para a empresa | `403 module_not_enabled` |
+
+- A empresa vem **sempre** da sessão (`context.companyId`); nenhuma rota aceita empresa por parâmetro. As consultas (`src/application/access/company-queries.ts`) só recebem um `AuthorizedContext`.
+- Recurso de outra empresa, inexistente ou com id inválido responde `404` (mesma resposta, sem enumeração).
+- Vínculo ou empresa suspensos perdem acesso na hora, mesmo com sessão válida (a verificação é feita a cada requisição).
+- **Entitlements:** cada permissão pertence a um módulo (`src/domain/access-control/permission-modules.ts`); hoje todas são do Core. A implementação provisória `createCoreOnlyEntitlementService` considera o Core sempre ativo e nega os demais módulos, até a FASE 3 criar o catálogo e os módulos contratados por empresa.
+- Troca de empresa ativa auditada como `auth.active_company_selected`.
+
 ### Pendente na FASE 2
 
-Empresa ativa e verificação de permissões (RBAC) nas rotas de negócio, já preparada para a verificação de entitlement do módulo (MASTER SPEC v0.2: tenant → RBAC → entitlement → recurso); MFA obrigatório para OWNER/ADMIN (app autenticador + códigos de recuperação); verificação de e-mail (obrigatória no MASTER SPEC v0.2), link mágico e recuperação de senha (serviço de e-mail a definir); login com Google; headers de segurança (CSP, HSTS) e logs estruturados; rotação de chaves.
+MFA obrigatório para OWNER/ADMIN (app autenticador + códigos de recuperação); verificação de e-mail (obrigatória no MASTER SPEC v0.2), link mágico e recuperação de senha (serviço de e-mail a definir); login com Google; headers de segurança (CSP, HSTS) e logs estruturados; rate limiting nas rotas de negócio; rotação de chaves.
 
 Com o modelo modular (MASTER SPEC v0.2), o cadastro deverá levar ao **VELDOCS Builder** e o trial de 14 dias começará após a escolha dos módulos — isso pertence à FASE 3 (catálogo de módulos, entitlements, Builder, preço e trial).
 

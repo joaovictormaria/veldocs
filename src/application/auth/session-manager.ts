@@ -36,6 +36,8 @@ export interface SessionManager {
   /** Sempre cria uma sessão nova (evita session fixation). */
   issue(input: { userId: string; activeCompanyId: string | null } & RequestContext): Promise<IssuedSession>;
   validate(token: string | undefined): Promise<ValidSession | null>;
+  /** Troca a empresa ativa de uma sessão válida (o vínculo deve ser verificado antes). */
+  setActiveCompany(token: string | undefined, companyId: string): Promise<ValidSession | null>;
   /** Revoga a sessão do token, se existir e estiver ativa. */
   revoke(token: string | undefined): Promise<ValidSession | null>;
   revokeAllForUser(userId: string): Promise<number>;
@@ -103,6 +105,13 @@ export function createSessionManager(deps: {
         return toValid(session, expiresAt);
       }
       return toValid(session);
+    },
+
+    async setActiveCompany(token, companyId) {
+      const session = await findActive(token);
+      if (!session) return null;
+      await deps.sessions.setActiveCompany(session.id, companyId);
+      return { ...toValid(session), activeCompanyId: companyId };
     },
 
     async revoke(token) {
