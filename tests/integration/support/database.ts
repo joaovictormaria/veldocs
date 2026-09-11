@@ -23,7 +23,7 @@ export function createTestAuthServices(prisma: PrismaClient, now?: () => Date) {
  * cadastro (toda empresa nova recebe o Core, com FK para `modules`) e deixaria
  * o banco de teste diferente do de produção.
  */
-const MIGRATION_SEEDED_TABLES = ["_prisma_migrations", "modules", "module_dependencies"];
+const MIGRATION_SEEDED_TABLES = ["_prisma_migrations", "modules", "module_dependencies", "module_prices"];
 
 /** Limpa as tabelas da aplicação (inclusive audit_logs: TRUNCATE não dispara o trigger de UPDATE/DELETE). */
 export async function truncateAllTables(prisma: PrismaClient): Promise<void> {

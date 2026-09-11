@@ -181,6 +181,28 @@ Exemplos de módulos comercializáveis:
 
 Os preços reais serão definidos comercialmente depois. O sistema, porém, deve nascer preparado para preço por módulo.
 
+**Preços definidos pelo usuário em 2026-09-11** (vigentes desde 11/09/2026, gravados pela migração `module_prices_initial`; total com todos os módulos: R$ 638,30/mês):
+
+| # | Módulo | Preço mensal |
+|---|---|---|
+| 1 | Core (obrigatório) | R$ 49,90 |
+| 2 | Controle de vencimentos | R$ 19,90 |
+| 3 | Funcionários | R$ 29,90 |
+| 4 | Fornecedores | R$ 29,90 |
+| 5 | Contratos | R$ 39,90 |
+| 6 | Solicitações | R$ 29,90 |
+| 7 | Aprovações | R$ 19,90 |
+| 8 | Automação | R$ 39,90 |
+| 9 | Análise inteligente de documentos | R$ 59,90 |
+| 10 | Assistente IA | R$ 39,90 |
+| 11 | WhatsApp | R$ 59,90 |
+| 12 | Portal de terceiros | R$ 39,90 |
+| 13 | Relatórios avançados | R$ 29,90 |
+| 14 | OCR / extração de dados | R$ 39,90 |
+| 15 | Score documental | R$ 29,90 |
+| 16 | Radar de risco | R$ 39,90 |
+| 17 | Modo auditoria | R$ 39,90 |
+
 ## 2.4 Builder de módulos
 
 Após o cadastro:
@@ -253,6 +275,22 @@ Documentos + Vencimentos + Alertas
 ```
 
 Os kits são uma camada comercial opcional sobre os módulos individuais.
+
+**Kits definidos pelo usuário em 2026-09-11** — 🔴 NÃO IMPLEMENTADO:
+
+| Kit | Indicado para | Módulos incluídos | Preço | Soma avulsa | Economia |
+|---|---|---|---|---|---|
+| Essencial | Empresas que querem começar | Core + Controle de vencimentos + "Alertas" | R$ 69,90 | R$ 69,80 | ⚠️ **−R$ 0,10** |
+| Gestão | Empresas que controlam pessoas e fornecedores | Core + Vencimentos + Funcionários + Fornecedores + Solicitações | R$ 129,90 | R$ 159,50 | R$ 29,60 (18,6%) |
+| Inteligência | Empresas que querem IA e análise | Core + Análise inteligente + OCR + Assistente IA + Score documental + Radar de risco | R$ 199,90 | R$ 259,40 | R$ 59,50 (22,9%) |
+| Comunicação | Empresas que precisam interagir com terceiros | Core + WhatsApp + Portal de terceiros + Solicitações | R$ 119,90 | R$ 179,60 | R$ 59,70 (33,2%) |
+| Controle Avançado | Empresas com processos mais estruturados | Core + Contratos + Aprovações + Automação + Relatórios avançados + Modo auditoria | R$ 169,90 | R$ 219,40 | R$ 49,50 (22,6%) |
+| Complete | Empresas que querem praticamente tudo | Core + todos os 16 módulos | R$ 399,90 | R$ 638,30 | R$ 238,40 (37,3%) |
+
+Pendências antes de implementar:
+
+- **Essencial:** custaria R$ 0,10 a mais que os mesmos módulos avulsos, e "Alertas" não é um módulo do catálogo (os alertas fazem parte do Controle de vencimentos).
+- **Combinação:** como um kit se soma a módulos avulsos e se o Builder sugere o kit quando a seleção sair mais cara que ele.
 
 ## 2.8 Trial gratuito de 14 dias
 
@@ -1286,7 +1324,7 @@ As recomendações devem ser:
 
 ## FASE 3 — Empresa, usuários e módulos comerciais
 
-**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada. Da segunda, já existem o catálogo de módulos, os entitlements por empresa e os estados do trial no backend; faltam o Builder, o preço em tempo real, o início do trial e as decisões comerciais de preços e kits. Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
+**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada. Da segunda, já existem o catálogo de módulos, os entitlements por empresa e os estados do trial no backend; faltam o Builder, a exibição do preço em tempo real, o início do trial e os kits (tabela recebida em 2026-09-11; o Essencial precisa de ajuste). Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
 
 - ✅ CONCLUÍDO — Empresas (entidade, criação no cadastro e edição dos dados cadastrais com CNPJ validado)
   - Evidência: `PATCH /api/company` (`company.update`), `src/application/access/manage-company.ts`, `src/domain/company/cnpj.ts`; auditoria `company.updated`.
@@ -1300,13 +1338,17 @@ As recomendações devem ser:
 - 🟡 PARCIAL — Permissions (catálogo de 18 permissões)
 - 🟡 PARCIAL — Catálogo de módulos
   - Evidência: os 17 módulos da seção 2.3 em `src/domain/billing/module-catalog.ts`, povoados pela migração `commercial_catalog_and_subscriptions` (DEC-023); tabelas `modules`, `module_dependencies` e `module_prices`. Teste de integração compara banco × domínio.
-  - Pendente: preços (tabela pronta, vazia até a definição comercial), kits e dependências além do Core.
+  - Preços: os 17 preços mensais definidos pelo usuário em 2026-09-11, gravados pela migração `module_prices_initial` (seção 2.3).
+  - Pendente: kits (seção 2.7) e dependências além do Core.
 - ✅ CONCLUÍDO — Entitlements (verificação na cadeia de autorização)
   - Evidência: `company_modules` por empresa; `src/infrastructure/access/database-entitlements.ts` substitui o provisório "só Core"; o Core é provisionado no cadastro; assinatura inválida bloqueia tudo, Core incluído, sem apagar dados; empresa sem assinatura (antes do Builder) usa o Core; módulo pago exige contratação ativa **e** assinatura válida (DEC-022).
   - Testes: `tests/integration/access/entitlements.test.ts` (trial vigente e vencido, módulo não contratado ou desativado, sem assinatura, PAST_DUE/CANCELED/SUSPENDED, isolamento entre empresas, FK do catálogo, Core no cadastro) — passaram (local, 2026-09-11).
   - Observação: nenhuma permissão pertence ainda a módulo pago — as capacidades desses módulos são de fases futuras, e o bloqueio passa a valer automaticamente quando existirem. Ativar e desativar módulos é parte do Builder.
 - 🔴 NÃO IMPLEMENTADO — Builder
-- 🔴 NÃO IMPLEMENTADO — Preço em tempo real (depende dos preços comerciais)
+- 🟡 PARCIAL — Preço em tempo real
+  - Evidência: preço vigente por data em `src/infrastructure/database/prisma-billing-catalog-repository.ts` e orçamento calculado no backend em `src/domain/billing/pricing.ts` via `createCatalogQueries.quote` — Core sempre incluído, dependências resolvidas, módulo sem preço vigente explícito em vez de valer zero.
+  - Testes: `tests/unit/domain/billing/pricing.test.ts` e `tests/integration/billing/module-prices.test.ts` — passaram (local, 2026-09-11).
+  - Pendente: exibição no Builder e desconto dos kits.
 - 🟡 PARCIAL — Trial state machine
   - Evidência: `src/domain/billing/subscription-status.ts` — 14 dias, estados da seção 2.8 (canônicos no banco e derivados do tempo na leitura — DEC-022), transições permitidas e reativação; tabela `subscriptions`.
   - Testes: `tests/unit/domain/billing/subscription-status.test.ts` — passou.
@@ -1620,11 +1662,11 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 ---
 
-## DEC-023 — Catálogo de módulos versionado em migração, sem preços
+## DEC-023 — Catálogo e preços versionados em migração
 
 **Status:** ✅ CONCLUÍDO (implementado na FASE 3)
 
-**Decisão:** os 17 módulos da seção 2.3 são povoados pela própria migração `commercial_catalog_and_subscriptions`, espelhando `src/domain/billing/module-catalog.ts`; um teste de integração compara as linhas do banco com o domínio. `module_prices` nasce **vazia**: módulo sem preço vigente significa "preço ainda não definido".
+**Decisão:** os 17 módulos da seção 2.3 são povoados pela própria migração `commercial_catalog_and_subscriptions`, espelhando `src/domain/billing/module-catalog.ts`; um teste de integração compara as linhas do banco com o domínio. Os preços definidos pelo usuário em 2026-09-11 entram pela migração `module_prices_initial`, com vigência a partir de 11/09/2026. **Preço nunca é sobrescrito:** mudar um valor é uma migração nova que encerra o atual (`valid_until`) e insere o novo, preservando o histórico. O banco recusa preço negativo, vigência invertida e moeda fora do formato de 3 letras. Módulo sem preço vigente aparece explícito no orçamento, sem valer zero.
 
 **Motivo:** a seção 2.3 diz que os preços serão definidos comercialmente depois, mas que o sistema deve nascer preparado; e a 2.5 exige que o preço venha do backend. Povoar pela migração garante que produção, testes e desenvolvimento tenham exatamente o mesmo catálogo, aplicado pelo `migrate deploy` que já roda no pre-deploy.
 
@@ -1641,12 +1683,12 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 **Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit, CSRF, empresa ativa, RBAC, MFA para OWNER/ADMIN, CSP com nonce, HSTS e logs estruturados; verificação de e-mail e recuperação de senha no backlog)
 **Frontend:** 🔴 NÃO IMPLEMENTADO (somente página inicial da fundação)
 **Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial e entitlements por empresa; sem módulos de negócio)
-**Banco:** 🟡 PARCIAL (identidade, empresa, acesso, documentos, auditoria, catálogo comercial, módulos por empresa e assinatura; preços ainda não cadastrados)
+**Banco:** 🟡 PARCIAL (identidade, empresa, acesso, documentos, auditoria, catálogo comercial com preços, módulos por empresa e assinatura; kits ainda não modelados)
 **Storage:** 🔴 NÃO IMPLEMENTADO
 **Billing:** 🔴 NÃO IMPLEMENTADO
 **WhatsApp:** 🔴 NÃO IMPLEMENTADO
 **IA:** 🔴 NÃO IMPLEMENTADO
-**Testes:** 🟡 PARCIAL (308 unitários, 106 integração, 23 E2E; CI bloqueando o deploy)
+**Testes:** 🟡 PARCIAL (313 unitários, 115 integração, 23 E2E; CI bloqueando o deploy)
 
 ## Bloqueadores
 
@@ -1655,7 +1697,7 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 - **Arquivos vetoriais da logo (SVG):** não bloqueia; os recortes raster atuais atendem a página e os ícones.
 
 - ⏳ **Proteção da branch `main`**: exige GitHub Pro ou repositório público.
-- Decisões comerciais pendentes da FASE 3: preços dos 17 módulos (inclusive o preço-base do Core), kits e dependências além do Core. Carência e bloqueio sem assinatura foram decididos em 2026-09-11 (DEC-022).
+- Decisões comerciais pendentes da FASE 3: ajuste do Kit Essencial (custaria R$ 0,10 a mais que os módulos avulsos, e "Alertas" não é módulo), regra de combinação de kits com módulos avulsos e dependências além do Core. Preços, carência e bloqueio sem assinatura foram decididos em 2026-09-11.
 - Decisões pendentes sem bloqueio imediato: unicidade de CNPJ entre empresas, retenção de `audit_logs` × LGPD, adoção de RLS, rotação de chaves.
 
 ## Regra final
@@ -1961,3 +2003,65 @@ Verificação em produção: após o merge e o deploy. Nenhuma empresa tem assin
 
 - Toda requisição autorizada passa a consultar a assinatura da empresa (busca por chave única, indexada).
 - A spec (2.3) lista 16 módulos contratáveis além do Core; o README listava 15 e omitia "Score documental" — corrigido.
+
+---
+
+## 2026-09-11 — FASE 3: preços dos módulos e tabela de kits
+
+### Preços (implementado)
+
+Tabela enviada pelo usuário, gravada pela migração `20260911044509_module_prices_initial` com vigência a partir de 11/09/2026 00:00 (Brasília):
+
+| # | Módulo | Preço mensal |
+|---|---|---|
+| 1 | Core (obrigatório) | R$ 49,90 |
+| 2 | Controle de vencimentos | R$ 19,90 |
+| 3 | Funcionários | R$ 29,90 |
+| 4 | Fornecedores | R$ 29,90 |
+| 5 | Contratos | R$ 39,90 |
+| 6 | Solicitações | R$ 29,90 |
+| 7 | Aprovações | R$ 19,90 |
+| 8 | Automação | R$ 39,90 |
+| 9 | Análise inteligente de documentos | R$ 59,90 |
+| 10 | Assistente IA | R$ 39,90 |
+| 11 | WhatsApp | R$ 59,90 |
+| 12 | Portal de terceiros | R$ 39,90 |
+| 13 | Relatórios avançados | R$ 29,90 |
+| 14 | OCR / extração de dados | R$ 39,90 |
+| 15 | Score documental | R$ 29,90 |
+| 16 | Radar de risco | R$ 39,90 |
+| 17 | Modo auditoria | R$ 39,90 |
+
+| Item | Evidência |
+|---|---|
+| Integridade | CHECKs: preço não negativo, vigência em ordem, moeda com 3 letras |
+| Preço vigente | `src/infrastructure/database/prisma-billing-catalog-repository.ts`: mensal, já iniciado e não encerrado; o de início mais recente vence |
+| Orçamento | `src/domain/billing/pricing.ts` + `src/application/billing/catalog-queries.ts`: Core sempre incluído, dependências resolvidas, módulo sem preço e chave desconhecida explícitos |
+| Testes de integração | a limpeza entre testes passou a preservar também `module_prices` |
+
+Orçamentos conferidos com os preços reais: só o Core R$ 49,90; Core + Vencimentos + WhatsApp R$ 129,70; todos os 17 módulos R$ 638,30.
+
+### Kits (recebidos, não implementados)
+
+| Kit | Indicado para | Módulos incluídos | Preço | Soma avulsa | Economia |
+|---|---|---|---|---|---|
+| Essencial | Empresas que querem começar | Core + Controle de vencimentos + "Alertas" | R$ 69,90 | R$ 69,80 | ⚠️ **−R$ 0,10** |
+| Gestão | Empresas que controlam pessoas e fornecedores | Core + Vencimentos + Funcionários + Fornecedores + Solicitações | R$ 129,90 | R$ 159,50 | R$ 29,60 (18,6%) |
+| Inteligência | Empresas que querem IA e análise | Core + Análise inteligente + OCR + Assistente IA + Score documental + Radar de risco | R$ 199,90 | R$ 259,40 | R$ 59,50 (22,9%) |
+| Comunicação | Empresas que precisam interagir com terceiros | Core + WhatsApp + Portal de terceiros + Solicitações | R$ 119,90 | R$ 179,60 | R$ 59,70 (33,2%) |
+| Controle Avançado | Empresas com processos mais estruturados | Core + Contratos + Aprovações + Automação + Relatórios avançados + Modo auditoria | R$ 169,90 | R$ 219,40 | R$ 49,50 (22,6%) |
+| Complete | Empresas que querem praticamente tudo | Core + todos os 16 módulos | R$ 399,90 | R$ 638,30 | R$ 238,40 (37,3%) |
+
+O **Essencial** sairia R$ 0,10 mais caro que os mesmos módulos avulsos, e "Alertas" não é módulo do catálogo. Os kits só serão modelados depois desse ajuste e da regra de combinação com módulos avulsos.
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm lint` / `tsc --noEmit` | ✅ sem erros |
+| `pnpm test` | ✅ 26 arquivos, 313 testes (novos: orçamento mensal) |
+| `pnpm test:integration` | ✅ 9 arquivos, 115 testes (novos: preços da migração × tabela do usuário, vigência futura e encerrada, CHECKs, orçamentos com preços reais) |
+| `pnpm test:e2e` | ✅ 23 testes |
+| `pnpm build` | ✅ |
+
+Verificação em produção: após o merge e o deploy (a migração roda no pre-deploy).
