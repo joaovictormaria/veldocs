@@ -8,7 +8,16 @@ export class TrialAlreadyStartedError extends Error {
   }
 }
 
+/** A assinatura não está (mais) em teste grátis vigente: a troca de módulos não vale. */
+export class SubscriptionNotInTrialError extends Error {
+  constructor() {
+    super("a assinatura não está em teste grátis vigente");
+    this.name = "SubscriptionNotInTrialError";
+  }
+}
+
 export interface StoredSubscription {
+  readonly id: string;
   readonly status: SubscriptionStatus;
   readonly kitKey: string | null;
   readonly trialStartedAt: Date | null;
@@ -27,6 +36,14 @@ export interface NewTrial {
   readonly endsAt: Date;
 }
 
+export interface ModuleChange {
+  readonly companyId: string;
+  readonly kitKey: string | null;
+  /** Nova seleção já resolvida: Core + kit + extras + dependências. */
+  readonly modules: readonly string[];
+  readonly at: Date;
+}
+
 /** Assinatura da empresa. Toda operação é escopada pelo `companyId` recebido. */
 export interface SubscriptionRepository {
   findByCompany(companyId: string): Promise<StoredSubscription | null>;
@@ -37,4 +54,10 @@ export interface SubscriptionRepository {
    * @throws {TrialAlreadyStartedError} a empresa já tem assinatura.
    */
   startTrial(trial: NewTrial): Promise<{ readonly id: string }>;
+  /**
+   * Troca kit e módulos de uma assinatura em trial vigente, na mesma transação:
+   * ativa os novos e desativa os que saíram, sem apagar nada.
+   * @throws {SubscriptionNotInTrialError} o trial não está vigente no momento da gravação.
+   */
+  changeModules(change: ModuleChange): Promise<{ readonly activated: string[]; readonly deactivated: string[] }>;
 }

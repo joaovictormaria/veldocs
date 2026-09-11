@@ -94,6 +94,15 @@ export function grantsAccess(status: EffectiveStatus): boolean {
   return GRANTS_ACCESS.has(status);
 }
 
+/**
+ * Troca de kit e módulos pelo próprio cliente: só durante o teste grátis
+ * vigente (MASTER SPEC 2.8). Numa assinatura paga a troca mexe em cobrança e
+ * proporcionalidade, que dependem do pagamento (FASE 16) — DEC-030.
+ */
+export function canChangeModules(status: EffectiveStatus): boolean {
+  return status === "TRIAL_ACTIVE" || status === "TRIAL_EXPIRING";
+}
+
 /** Transições permitidas do estado canônico. */
 const ALLOWED_TRANSITIONS: Readonly<Record<SubscriptionStatus, readonly SubscriptionStatus[]>> = {
   TRIALING: ["ACTIVE", "PAYMENT_PENDING", "CANCELED", "SUSPENDED"],

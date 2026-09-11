@@ -10,7 +10,7 @@ Fonte da verdade: `src/app/*/page.tsx` (rotas), [`src/presentation/screens/`](..
 | Cadastro | `/cadastro` | sem sessão | cria conta e empresa e segue para o segundo fator |
 | Login | `/entrar` | sem sessão | e-mail ou CPF e senha; volta ao destino pedido em `?next=` |
 | Segundo fator | `/seguranca` | com sessão e MFA pendente | configura o app autenticador ou verifica com código do app ou de recuperação |
-| Builder | `/builder` | com sessão e MFA em dia | kits, módulos, total em tempo real, sugestão de kit e início do trial; depois, o resumo da assinatura |
+| Builder | `/builder` | com sessão e MFA em dia | kits, módulos, total em tempo real, sugestão de kit e início do trial; depois, o resumo da assinatura, com "Alterar módulos" durante o trial |
 | Convite | `/convite/[token]` | todos | aceite com a conta atual ou cadastro já como membro |
 | Início | `/inicio` | todos | encaminha para o próximo passo |
 
@@ -59,4 +59,4 @@ Tema escuro pelo `prefers-color-scheme` (`dark:`). A logo clara ou escura acompa
 | Nível | Arquivo |
 |---|---|
 | Unitário | [`tests/unit/presentation/api-client-and-format.test.ts`](../../tests/unit/presentation/api-client-and-format.test.ts) — destino seguro, mensagens da API, formatação |
-| E2E no navegador | [`tests/e2e/builder-ui.spec.ts`](../../tests/e2e/builder-ui.spec.ts) — cadastro → segundo fator → kit Gestão + Contratos → trial; sugestão de kit; login com código de recuperação; convite pela tela; telas protegidas |
+| E2E no navegador | [`tests/e2e/builder-ui.spec.ts`](../../tests/e2e/builder-ui.spec.ts) — cadastro → segundo fator → kit Gestão + Contratos → trial; sugestão de kit; login com código de recuperação; convite pela tela; telas protegidas; [`tests/e2e/module-change.spec.ts`](../../tests/e2e/module-change.spec.ts) — troca de kit e módulos pelo resumo e cancelar sem alterar |

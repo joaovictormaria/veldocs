@@ -9,7 +9,7 @@ O Builder é o passo seguinte ao cadastro (MASTER SPEC 2.4): a empresa escolhe u
 | Permissão | Quem tem | Uso |
 |---|---|---|
 | `billing.read` | OWNER e ADMIN | ver catálogo, orçamento e situação da assinatura |
-| `billing.manage` | OWNER e ADMIN | iniciar o trial |
+| `billing.manage` | OWNER e ADMIN | iniciar o trial e trocar kit e módulos durante o trial |
 
 As duas **continuam valendo com a assinatura bloqueada** (trial vencido, atraso, cancelada, suspensa): é o caminho para a empresa ver sua situação e assinar ou reativar (MASTER SPEC 2.9, DEC-026). Todas as outras rotas ficam bloqueadas nesse estado (DEC-022).
 
@@ -21,6 +21,7 @@ As duas **continuam valendo com a assinatura bloqueada** (trial vencido, atraso,
 | `GET` | `/api/builder/quote?modules=a,b` | `billing.read` | `{ kind: "modules", quote }` — total avulso e `suggestion` de kit |
 | `GET` | `/api/builder/quote?kit=k&modules=a,b` | `billing.read` | `{ kind: "kit", quote }` — kit + módulos fora dele |
 | `POST` | `/api/builder/trial` | `billing.manage` | `201 { subscription }` |
+| `PUT` | `/api/subscription/modules` | `billing.manage` | `{ subscription }` — troca durante o trial |
 | `GET` | `/api/subscription` | `billing.read` | `{ subscription }` |
 
 ## Fluxo
@@ -30,6 +31,7 @@ As duas **continuam valendo com a assinatura bloqueada** (trial vencido, atraso,
 3. `GET /api/builder/quote` a cada mudança na seleção (preço em tempo real).
 4. `POST /api/builder/trial` com `{ "kitKey": "gestao", "modules": ["contratos"] }` (os dois campos são opcionais).
 5. `GET /api/subscription` passa a mostrar o trial, os dias restantes e o valor após o trial.
+6. Durante o trial, `PUT /api/subscription/modules` com o mesmo corpo troca kit e módulos.
 
 ## Orçamento
 
@@ -51,12 +53,25 @@ Validações, todas antes de gravar qualquer coisa:
 
 Numa única transação: cria a assinatura `TRIALING` (14 dias a partir de agora, com o kit escolhido) e ativa os módulos resolvidos (Core + kit + extras + dependências). `subscriptions.company_id` é único, então duas requisições simultâneas não criam dois trials. Grava a auditoria `subscription.trial_started` com kit, módulos e valor mensal.
 
+## Troca de kit e módulos durante o trial
+
+`PUT /api/subscription/modules` recebe o mesmo corpo do início do trial e substitui a escolha inteira (não é incremental): `{ "kitKey": "comunicacao", "modules": ["vencimentos"] }`.
+
+| Situação | Resposta |
+|---|---|
+| Escolha inválida (as mesmas regras do início do trial) | `400 invalid_input` |
+| A empresa ainda não iniciou o trial | `409 trial_not_started` |
+| Trial vencido ou assinatura fora do trial (`ACTIVE`, `PAST_DUE`, `CANCELED`…) | `409 not_in_trial` |
+
+Numa única transação, que confere de novo se o trial ainda vale: grava o novo kit, ativa os módulos novos e desativa os que saíram — `INACTIVE` com `deactivated_at`, **sem apagar dados**; escolher de novo um módulo desativado reativa a mesma linha. As datas do trial não mudam, e o resumo devolvido já traz o novo valor após o trial. A auditoria `subscription.modules_changed` (kit anterior e novo, módulos ativados e desativados, novo valor) só é gravada quando algo muda. Por que só durante o trial: DEC-030.
+
 ## Situação da assinatura
 
 | Campo | Significado |
 |---|---|
 | `status` | `NOT_STARTED` ou o estado efetivo (`TRIAL_ACTIVE`, `TRIAL_EXPIRING`, `TRIAL_EXPIRED`, `ACTIVE`, `REACTIVATED`, `PAYMENT_PENDING`, `PAST_DUE`, `CANCELED`, `SUSPENDED`) |
 | `hasAccess` | a empresa consegue usar o sistema |
+| `canChangeModules` | kit e módulos podem ser trocados agora (teste grátis vigente) |
 | `trial` | `{ startedAt, endsAt, daysRemaining }` enquanto estiver em trial |
 | `kit` / `modules` | kit escolhido e módulos ativos, na ordem do catálogo |
 | `monthlyTotalCents` | valor mensal com os preços vigentes — o que será cobrado após o trial |
@@ -64,11 +79,11 @@ Numa única transação: cria a assinatura `TRIALING` (14 dias a partir de agora
 
 ## Escritas
 
-`POST /api/builder/trial` passa por `prepareWrite`: origem (CSRF) → limite de 30/min por IP → autorização → corpo JSON. As leituras usam o limite geral de 120/min por IP.
+`POST /api/builder/trial` e `PUT /api/subscription/modules` passam por `prepareWrite`: origem (CSRF) → limite de 30/min por IP → autorização → corpo JSON. As leituras usam o limite geral de 120/min por IP.
 
 ## Ainda não existe
 
-- Trocar kit ou módulos durante o trial (MASTER SPEC 2.8).
+- Trocar kit ou módulos numa assinatura paga (depende do pagamento — DEC-030).
 - Pagamento e as transições de assinatura acionadas por cobrança (FASE 16).
 - Exclusão de contas após a retenção (DEC-025).
 
@@ -77,5 +92,5 @@ Numa única transação: cria a assinatura `TRIALING` (14 dias a partir de agora
 | Nível | Arquivo |
 |---|---|
 | Unitário | [`tests/unit/application/billing/subscription-use-cases.test.ts`](../../tests/unit/application/billing/subscription-use-cases.test.ts), [`tests/unit/domain/access-control/permission-modules.test.ts`](../../tests/unit/domain/access-control/permission-modules.test.ts), [`tests/unit/application/access/authorize-and-select.test.ts`](../../tests/unit/application/access/authorize-and-select.test.ts) |
-| Integração | [`tests/integration/billing/subscription.test.ts`](../../tests/integration/billing/subscription.test.ts) |
-| E2E | [`tests/e2e/builder.spec.ts`](../../tests/e2e/builder.spec.ts) |
+| Integração | [`tests/integration/billing/subscription.test.ts`](../../tests/integration/billing/subscription.test.ts), [`tests/integration/billing/module-change.test.ts`](../../tests/integration/billing/module-change.test.ts) |
+| E2E | [`tests/e2e/builder.spec.ts`](../../tests/e2e/builder.spec.ts), [`tests/e2e/module-change.spec.ts`](../../tests/e2e/module-change.spec.ts) |
