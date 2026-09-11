@@ -364,7 +364,7 @@ O objetivo é **mostrar valor**, e não pressionar o usuário.
 - 🟡 PARCIAL — Empresa (tabela `companies` com filiais e setores; criada no cadastro com perfis padrão; gestão da empresa pendente)
 - 🟡 PARCIAL — Usuários (pessoa global `users` com vínculos multiempresa `memberships`; cadastro público; convites e gestão de membros pendentes)
 - 🟡 PARCIAL — Autenticação (cadastro, login por e-mail ou CPF + senha, sessão, logout e logout geral em produção; MFA, verificação de e-mail, recuperação de senha, link mágico e Google pendentes)
-- 🟡 PARCIAL — RBAC/permissões (catálogo de 18 permissões, 5 perfis padrão e verificação de permissão em todas as rotas de negócio existentes; gestão de perfis e membros — FASE 3)
+- 🟡 PARCIAL — RBAC/permissões (catálogo de 22 permissões, 5 perfis padrão e verificação de permissão em todas as rotas de negócio existentes; gestão de perfis e membros — FASE 3)
 - 🟡 PARCIAL — Multi-tenancy (FKs compostas no banco; empresa ativa na sessão e filtro por empresa nas rotas existentes; storage e demais recursos nas fases seguintes)
 - 🔴 NÃO IMPLEMENTADO — Core modular
 - 🔴 NÃO IMPLEMENTADO — Catálogo de módulos
@@ -374,8 +374,8 @@ O objetivo é **mostrar valor**, e não pressionar o usuário.
 - 🔴 NÃO IMPLEMENTADO — Upload seguro
 - 🔴 NÃO IMPLEMENTADO — Storage privado (somente contrato `StorageProvider`)
 - ✅ CONCLUÍDO — Pesquisa (busca sem acento em título, descrição e etiquetas, com filtros, ordenação e paginação, na API e na tela de documentos)
-- 🔴 NÃO IMPLEMENTADO — Vencimentos (somente colunas `issue_date`/`expiration_date`)
-- 🔴 NÃO IMPLEMENTADO — Alertas
+- ✅ CONCLUÍDO — Vencimentos (módulo Controle de vencimentos: situação automática, filtro por situação e renovação, na API e nas telas — DEC-033)
+- 🟡 PARCIAL — Alertas (painel `/vencimentos` com vencidos e a vencer em 30 dias; aviso ativo por e-mail ou WhatsApp pendente)
 - 🔴 NÃO IMPLEMENTADO — Dashboard
 - 🟡 PARCIAL — Auditoria/histórico (`audit_logs` append-only; eventos de cadastro, login e logout)
 - 🔴 NÃO IMPLEMENTADO — Versionamento
@@ -874,14 +874,14 @@ Entidades existentes além da lista: `Membership` (vínculo pessoa ↔ empresa),
 
 ## 10.2 Vencimentos
 
-> **Status (2026-09-11):** 🟡 PARCIAL — as datas existem e são validadas na API de documentos; situação automática, alertas e renovação são a etapa seguinte da FASE 4, no módulo Controle de vencimentos.
+> **Status (2026-09-11):** 🟡 PARCIAL — módulo Controle de vencimentos implementado na FASE 4 (DEC-033): situação derivada, painel, filtro e renovação. Aviso ativo (e-mail, WhatsApp) depende dos canais de notificação.
 
 - [x] Datas de emissão/validade
-- [ ] Status automático
-- [ ] Alertas
-- [ ] Renovação
-- [ ] Responsável
-- [ ] Histórico
+- [x] Status automático — Em dia, Vence em breve (30 dias), Vencido e Sem validade, derivados da validade e do dia em Brasília
+- [ ] Alertas — painel `/vencimentos` e `GET /api/expirations` prontos; envio de aviso pendente (canal de notificação)
+- [x] Renovação — `POST /api/documents/[documentId]/renew`, a validade precisa avançar
+- [x] Responsável — aparece no painel ao lado de cada documento
+- [x] Histórico — auditoria `document.renewed` com as datas anteriores e as novas
 
 ## 10.3 Funcionários
 
@@ -969,11 +969,11 @@ Entidades existentes além da lista: `Membership` (vínculo pessoa ↔ empresa),
 ## 11.1 Dashboard executivo
 
 - [ ] Total de documentos
-- [ ] Válidos
-- [ ] Vencendo
-- [ ] Vencidos
+- [x] Válidos — contador do painel de vencimentos (módulo Controle de vencimentos)
+- [x] Vencendo — idem
+- [x] Vencidos — idem
 - [ ] Pendentes
-- [ ] Próximos vencimentos
+- [x] Próximos vencimentos — lista "Precisam de atenção" do painel
 - [ ] Atividade recente
 - [ ] Score documental
 - [ ] Radar de risco
@@ -1214,7 +1214,7 @@ Permissões funcionais
 
 A desativação de um módulo deve bloquear suas capacidades conforme a política comercial, sem destruir dados automaticamente.
 
-**Status (2026-09-11):** 🟡 PARCIAL — a relação empresa → assinatura → módulos ativos → entitlements existe no banco e na cadeia de autorização (DEC-022); módulo desativado fica bloqueado e assinatura inválida bloqueia a empresa inteira — nos dois casos sem apagar dados. A ativação e a desativação pelo Builder existem (início do trial e troca durante o trial — DEC-030). Faltam as permissões funcionais dos módulos pagos.
+**Status (2026-09-11):** 🟡 PARCIAL — a relação empresa → assinatura → módulos ativos → entitlements existe no banco e na cadeia de autorização (DEC-022); módulo desativado fica bloqueado e assinatura inválida bloqueia a empresa inteira — nos dois casos sem apagar dados. A ativação e a desativação pelo Builder existem (início do trial e troca durante o trial — DEC-030). O Controle de vencimentos já tem permissões funcionais (`expirations.*`, DEC-033); faltam as dos demais módulos pagos.
 
 ---
 
@@ -1347,7 +1347,7 @@ As recomendações devem ser:
   - Evidência: convite por link (`POST /api/company/invitations`, prévia, aceite com sessão e cadastro pelo link — DEC-028), troca de perfil, suspensão, reativação e remoção sem apagar o vínculo (DEC-027); `src/application/access/manage-members.ts`; `docs/api/membros-convites.md`.
   - Testes: `tests/integration/access/members.test.ts` e `tests/e2e/members.spec.ts` — passaram (local, 2026-09-11).
 - 🟡 PARCIAL — Roles: 5 perfis padrão por empresa, listados com permissões e membros (`GET /api/company/roles`) e atribuídos a membros; perfis personalizados pendentes.
-- 🟡 PARCIAL — Permissions (catálogo de 18 permissões)
+- 🟡 PARCIAL — Permissions (catálogo de 22 permissões; `expirations.read`/`expirations.manage` são as primeiras de módulo pago)
 - 🟡 PARCIAL — Catálogo de módulos
   - Evidência: os 17 módulos da seção 2.3 em `src/domain/billing/module-catalog.ts`, povoados pela migração `commercial_catalog_and_subscriptions` (DEC-023); tabelas `modules`, `module_dependencies` e `module_prices`. Teste de integração compara banco × domínio.
   - Preços: os 17 preços mensais definidos pelo usuário em 2026-09-11, gravados pela migração `module_prices_initial` (seção 2.3).
@@ -1356,7 +1356,7 @@ As recomendações devem ser:
 - ✅ CONCLUÍDO — Entitlements (verificação na cadeia de autorização)
   - Evidência: `company_modules` por empresa; `src/infrastructure/access/database-entitlements.ts` substitui o provisório "só Core"; o Core é provisionado no cadastro; assinatura inválida bloqueia tudo, Core incluído, sem apagar dados; empresa sem assinatura (antes do Builder) usa o Core; módulo pago exige contratação ativa **e** assinatura válida (DEC-022).
   - Testes: `tests/integration/access/entitlements.test.ts` (trial vigente e vencido, módulo não contratado ou desativado, sem assinatura, PAST_DUE/CANCELED/SUSPENDED, isolamento entre empresas, FK do catálogo, Core no cadastro) — passaram (local, 2026-09-11).
-  - Observação: nenhuma permissão pertence ainda a módulo pago — as capacidades desses módulos são de fases futuras, e o bloqueio passa a valer automaticamente quando existirem. Ativar e desativar módulos é parte do Builder.
+  - Observação: o Controle de vencimentos é o primeiro módulo pago com permissões próprias (`expirations.*`, DEC-033) e o bloqueio já vale para ele; os demais módulos ganham as suas nas fases em que forem implementados. Ativar e desativar módulos é parte do Builder.
 - ✅ CONCLUÍDO — Builder
   - Evidência (API): `GET /api/builder/catalog`, `GET /api/builder/quote`, `POST /api/builder/trial` e `GET /api/subscription`, com as permissões `billing.read`/`billing.manage` de OWNER e ADMIN (DEC-026); `src/application/billing/subscription-use-cases.ts`; documentação em `docs/api/builder.md`.
   - Testes: `tests/unit/application/billing/subscription-use-cases.test.ts`, `tests/integration/billing/subscription.test.ts` e `tests/e2e/builder.spec.ts` — passaram (local, 2026-09-11).
@@ -1378,7 +1378,7 @@ As recomendações devem ser:
 
 ## FASE 4 — Núcleo documental
 
-**Status da fase:** 🟡 PARCIAL. Metadados, categorias, etiquetas, busca e filtros estão prontos na API e nas telas; faltam situação de vencimento com alertas e o dashboard.
+**Status da fase:** 🟡 PARCIAL. Metadados, categorias, etiquetas, busca, filtros e o controle de vencimentos estão prontos na API e nas telas; faltam o aviso ativo de vencimento e o dashboard.
 
 - ✅ CONCLUÍDO — Documentos (metadados pela API)
   - Evidência: `GET/POST /api/documents` e `GET/PATCH/DELETE /api/documents/[documentId]` com `documents.read/create/update/delete`; `src/application/documents/manage-documents.ts`; `docs/api/documentos.md`; auditoria `document.created/updated/deleted`.
@@ -1395,8 +1395,13 @@ As recomendações devem ser:
 - 🟡 PARCIAL — Pesquisa
   - Evidência: busca sem acento por título, descrição e etiquetas (coluna `documents.search_text`, DEC-031), com filtros por categoria (incluindo subcategorias), etiqueta, responsável, filial e setor, ordenação e paginação.
   - Tela: busca e filtros na lista de documentos, com paginação e resumo ("1-20 de 37").
-- 🔴 NÃO IMPLEMENTADO — Vencimentos (situação automática e renovação; as datas já existem e são validadas)
-- 🔴 NÃO IMPLEMENTADO — Alertas
+- ✅ CONCLUÍDO — Vencimentos (módulo Controle de vencimentos, DEC-033)
+  - Evidência: situação derivada em `src/domain/documents/expiration.ts`; `GET /api/expirations` (`expirations.read`), `POST /api/documents/[documentId]/renew` (`expirations.manage`) e `status`/`sort=expiration` em `GET /api/documents`, os dois últimos só com o módulo; migração `expiration_permissions`; auditoria `document.renewed`.
+  - Telas: `/vencimentos` (contadores, "Precisam de atenção" e renovação) e situação com filtro em `/documentos`; sem o módulo, a tela explica o que ele faz e leva ao Builder.
+  - Testes: `tests/unit/domain/documents/expiration.test.ts`, `tests/unit/application/documents/manage-expirations.test.ts`, `tests/integration/documents/expirations.test.ts`, `tests/e2e/expirations.spec.ts` e `tests/e2e/expirations-ui.spec.ts` — passaram (local, 2026-09-11).
+- 🟡 PARCIAL — Alertas
+  - Evidência: painel com vencidos e a vencer na janela de 30 dias (ajustável por `days`), do mais urgente para o menos.
+  - Pendente: aviso ativo por e-mail ou WhatsApp — o e-mail transacional está no backlog e o WhatsApp é a FASE 15.
 - 🔴 NÃO IMPLEMENTADO — Dashboard
 
 ## FASE 5 — Storage e upload seguro
@@ -1834,13 +1839,31 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 ---
 
+## DEC-033 — Controle de vencimentos como primeiro módulo pago
+
+**Status:** ✅ CONCLUÍDO (implementado na FASE 4)
+
+**Decisão:** a data de validade é dado do Core — qualquer empresa cadastra e vê. O **controle** sobre ela é do módulo Controle de vencimentos: situação automática (Em dia, Vence em breve, Vencido, Sem validade), filtro e ordenação por vencimento, painel com contadores e "Precisam de atenção", e renovação. As permissões `expirations.read` (todos os perfis padrão) e `expirations.manage` (quem já edita documentos) pertencem ao módulo `vencimentos`, então a autorização exige o perfil **e** o módulo.
+
+**Situação derivada, nunca gravada:** calculada da validade e do dia de hoje **em Brasília** — pelo mesmo motivo dos estados do trial (DEC-022), nada a agendar e nenhum momento em que o banco mente. "Vence em breve" cobre o dia do vencimento e os 30 dias anteriores; o filtro vira intervalo de datas no banco.
+
+**Renovação:** novas datas no mesmo documento; a validade precisa avançar (corrigir para trás é edição, não renovação), e a auditoria `document.renewed` guarda as datas anteriores e as novas.
+
+**Sem o módulo:** a listagem funciona normalmente, sem situação; pedir `status` ou `sort=expiration` responde `403 module_not_enabled`; a seção Vencimentos some do menu e `/vencimentos` explica o que o módulo faz, com o caminho para o Builder (MASTER SPEC 2.10 — mostrar valor sem pressionar).
+
+**Pendente:** aviso ativo (e-mail, WhatsApp). O e-mail transacional está no backlog por decisão do usuário e o WhatsApp é a FASE 15; o painel já entrega a lista que o aviso vai usar.
+
+**Evidência:** `src/domain/documents/expiration.ts`, `src/application/documents/manage-expirations.ts`, `src/app/api/expirations/route.ts`, `src/app/api/documents/[documentId]/renew/route.ts`, migração `expiration_permissions`; `tests/integration/documents/expirations.test.ts` (situação e filtro com datas reais, painel, renovação, GESTOR bloqueado sem o módulo e liberado com ele) e `tests/e2e/expirations.spec.ts` — passaram.
+
+---
+
 # 24. STATUS GERAL
 
 **Produto:** ✅ CONCLUÍDO (definição e identidade visual; vetores da logo pendentes)
 **Arquitetura:** ✅ CONCLUÍDO (monólito modular em camadas; entitlements por empresa na cadeia de autorização)
 **Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit, CSRF, empresa ativa, RBAC, MFA para OWNER/ADMIN, CSP com nonce, HSTS e logs estruturados; verificação de e-mail e recuperação de senha no backlog)
-**Frontend:** 🟡 PARCIAL (Tailwind CSS com a paleta oficial; telas de cadastro, login, segundo fator, Builder, convite, documentos e categorias, com cabeçalho e navegação comuns; sem dashboard)
-**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial, entitlements por empresa, API do Builder com início do trial e troca de módulos durante o trial, gestão de membros com convites; núcleo documental com categorias, etiquetas, busca e filtros — sem arquivo e sem os demais módulos de negócio)
+**Frontend:** 🟡 PARCIAL (Tailwind CSS com a paleta oficial; telas de cadastro, login, segundo fator, Builder, convite, documentos, categorias e vencimentos, com cabeçalho e navegação comuns; sem dashboard)
+**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial, entitlements por empresa, API do Builder com início do trial e troca de módulos durante o trial, gestão de membros com convites; núcleo documental com categorias, etiquetas, busca e filtros; módulo Controle de vencimentos — sem arquivo e sem os demais módulos de negócio)
 **Banco:** 🟡 PARCIAL (identidade, empresa, acesso, documentos com texto de busca e etiquetas, auditoria, catálogo comercial com preços e kits, módulos por empresa e assinatura com prazos de retenção)
 **Storage:** 🔴 NÃO IMPLEMENTADO
 **Billing:** 🔴 NÃO IMPLEMENTADO
@@ -2472,3 +2495,37 @@ Verificação em produção: após o merge e o deploy. Sem migração.
 
 - Dois ajustes durante a implementação: `api-client` passou a aceitar `PATCH`, e os testes precisaram escopar os rótulos repetidos entre filtro e formulário ("Categoria", "Responsável").
 - Próxima etapa: situação automática de vencimento, alertas e dashboard.
+
+---
+
+## 2026-09-11 — FASE 4: Controle de vencimentos (primeiro módulo pago)
+
+### O que foi feito
+
+| Item | Evidência |
+|---|---|
+| Situação automática | Em dia, Vence em breve (30 dias), Vencido e Sem validade, derivados da validade e do dia em Brasília (`src/domain/documents/expiration.ts`) |
+| Painel | `GET /api/expirations`: contadores por situação e documentos que precisam de atenção, do mais urgente; janela e limite ajustáveis |
+| Filtro e ordenação | `status` e `sort=expiration` em `GET /api/documents`, com a situação de cada documento — só com o módulo |
+| Renovação | `POST /api/documents/[documentId]/renew`: novas datas no mesmo documento, validade precisa avançar; auditoria `document.renewed` com as datas anteriores |
+| Permissões | `expirations.read` e `expirations.manage`, do módulo `vencimentos`; migração `expiration_permissions` concede aos perfis das empresas existentes (DEC-033) |
+| Telas | `/vencimentos` com contadores, "Precisam de atenção" e renovação; situação e filtro em `/documentos`; seção no menu só com o módulo; sem o módulo, a tela apresenta o módulo e leva ao Builder |
+| Ajuste de texto | a lista de documentos mostra "Validade: dd/mm/aaaa" — "Vence em" ficava errado para documento já vencido |
+| E2E | tempo de espera do `expect` passou de 5 s para 15 s: com a suíte inteira em paralelo, navegações encadeadas renderizadas no servidor estouravam os 5 s sem defeito (o teste afetado passava isolado em 11 s) |
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm lint` / `tsc --noEmit` | ✅ sem erros |
+| `pnpm test` | ✅ 36 arquivos, 445 testes (novos: situação nas bordas da janela, hoje em Brasília, contas com datas, painel, regras da renovação, permissões por módulo) |
+| `pnpm test:integration` | ✅ 14 arquivos, 173 testes (novos: situação e filtro com datas reais, ordenação por vencimento, painel com janela ajustável, exclusão fora das contas, isolamento, renovação e auditoria, GESTOR bloqueado sem o módulo e liberado com ele) |
+| `pnpm test:e2e` | ✅ 50 testes (novos: 403 sem o módulo e painel com ele, filtro por situação, renovação e recusa para trás, sessão e origem; no navegador, painel com renovação e a apresentação do módulo para quem não o tem) |
+| `pnpm build` | ✅ |
+
+Verificação em produção: após o merge e o deploy. A migração só insere duas permissões e as concede aos perfis de sistema.
+
+### Observações
+
+- Conferência visual do painel e da lista nos temas claro e escuro durante a implementação.
+- Aviso ativo de vencimento depende de canal: e-mail transacional (backlog) ou WhatsApp (FASE 15).

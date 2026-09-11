@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { EXPIRATIONS_MODULE_KEY } from "@/domain/documents/expiration";
 import { getAuthServices } from "@/infrastructure/composition/auth-services";
 import { getEnv } from "@/infrastructure/config/env";
 import { readSessionToken } from "@/infrastructure/http/session-cookie";
@@ -46,9 +47,11 @@ export default async function DocumentsPage() {
 
   const { context } = authorization;
   const can = (permission: string) => context.permissions.includes(permission);
+  // Situação de vencimento é capacidade de módulo pago (MASTER SPEC 10.2).
+  const expirations = (await services.entitlements.checkModule(context.companyId, EXPIRATIONS_MODULE_KEY)) === "enabled";
 
   const [listing, categories, branches, departments, members, tags] = await Promise.all([
-    services.documents.list(context, {}),
+    services.documents.list(context, {}, { expirations }),
     can("categories.read") ? services.categories.list(context) : [],
     can("branches.read") ? services.companyManagement.listBranches(context) : [],
     can("departments.read") ? services.companyManagement.listDepartments(context) : [],
@@ -76,11 +79,12 @@ export default async function DocumentsPage() {
         update: can("documents.update"),
         remove: can("documents.delete"),
       },
+      expirations,
     }),
   ) as DocumentsData;
 
   return (
-    <AppShell {...shell}>
+    <AppShell {...shell} hasExpirations={expirations}>
       <DocumentsClient data={data} />
     </AppShell>
   );

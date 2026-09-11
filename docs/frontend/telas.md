@@ -12,6 +12,7 @@ Fonte da verdade: `src/app/*/page.tsx` (rotas), [`src/presentation/screens/`](..
 | Segundo fator | `/seguranca` | com sessão e MFA pendente | configura o app autenticador ou verifica com código do app ou de recuperação |
 | Documentos | `/documentos` | com sessão e MFA em dia | lista com busca, filtros, ordenação e paginação; criar, editar e excluir documentos |
 | Categorias | `/categorias` | com sessão e MFA em dia | árvore de categorias com contagem de documentos; criar, editar e excluir |
+| Vencimentos | `/vencimentos` | com sessão e MFA em dia | contadores por situação, "Precisam de atenção" e renovação; sem o módulo Controle de vencimentos, apresenta o módulo e leva ao Builder |
 | Builder | `/builder` | com sessão e MFA em dia | kits, módulos, total em tempo real, sugestão de kit e início do trial; depois, o resumo da assinatura, com "Alterar módulos" durante o trial |
 | Convite | `/convite/[token]` | todos | aceite com a conta atual ou cadastro já como membro |
 | Início | `/inicio` | todos | encaminha para o próximo passo |
@@ -28,7 +29,7 @@ Documentos ◄──► Categorias ◄──► Assinatura   (navegação do cab
 
 `/inicio` decide o próximo passo no servidor: sem sessão → login; perfil que exige segundo fator ainda não confirmado → `/seguranca`; senão → `/builder`.
 
-As telas de quem já entrou compartilham o cabeçalho `AppShell` (`src/presentation/components/app-shell.tsx`): marca, empresa, navegação entre Documentos, Categorias e Assinatura, nome da pessoa e "Sair". A seção atual é marcada com `aria-current="page"`.
+As telas de quem já entrou compartilham o cabeçalho `AppShell` (`src/presentation/components/app-shell.tsx`): marca, empresa, navegação entre Documentos, Vencimentos, Categorias e Assinatura, nome da pessoa e "Sair". A seção atual é marcada com `aria-current="page"`. **Vencimentos só aparece para quem tem o módulo** — cada página confere o entitlement e passa `hasExpirations`.
 
 ## Arquitetura das telas
 
@@ -67,4 +68,4 @@ Tema escuro pelo `prefers-color-scheme` (`dark:`). A logo clara ou escura acompa
 | Nível | Arquivo |
 |---|---|
 | Unitário | [`tests/unit/presentation/api-client-and-format.test.ts`](../../tests/unit/presentation/api-client-and-format.test.ts) — destino seguro, mensagens da API, formatação; [`tests/unit/presentation/documents.test.ts`](../../tests/unit/presentation/documents.test.ts) — etiquetas do formulário, consulta da listagem, resumo da página, datas de calendário |
-| E2E no navegador | [`tests/e2e/builder-ui.spec.ts`](../../tests/e2e/builder-ui.spec.ts) — cadastro → segundo fator → kit Gestão + Contratos → trial; sugestão de kit; login com código de recuperação; convite pela tela; telas protegidas; [`tests/e2e/module-change.spec.ts`](../../tests/e2e/module-change.spec.ts) — troca de kit e módulos pelo resumo e cancelar sem alterar; [`tests/e2e/documents-ui.spec.ts`](../../tests/e2e/documents-ui.spec.ts) — categoria e subcategoria, documento com etiquetas e validade, busca sem acento, edição, exclusão, recusas explicadas e navegação |
+| E2E no navegador | [`tests/e2e/builder-ui.spec.ts`](../../tests/e2e/builder-ui.spec.ts) — cadastro → segundo fator → kit Gestão + Contratos → trial; sugestão de kit; login com código de recuperação; convite pela tela; telas protegidas; [`tests/e2e/module-change.spec.ts`](../../tests/e2e/module-change.spec.ts) — troca de kit e módulos pelo resumo e cancelar sem alterar; [`tests/e2e/documents-ui.spec.ts`](../../tests/e2e/documents-ui.spec.ts) — categoria e subcategoria, documento com etiquetas e validade, busca sem acento, edição, exclusão, recusas explicadas e navegação; [`tests/e2e/expirations-ui.spec.ts`](../../tests/e2e/expirations-ui.spec.ts) — painel de vencimentos com renovação, filtro por situação e apresentação do módulo para quem não o tem |

@@ -139,6 +139,22 @@ function createFakeRepository() {
       return documents.length < before;
     },
 
+    async summarizeExpirations(companyId, options) {
+      calls.push(`summarizeExpirations:${companyId}:${options.today}:${options.windowEnd}:${options.limit}`);
+      return {
+        counts: { valid: 4, expiring: 2, expired: 1, withoutExpiration: 3, total: 10 },
+        upcoming: documents.filter((document) => document.expirationDate !== null),
+      };
+    },
+    async renewDocument(companyId, documentId, input) {
+      calls.push(`renewDocument:${companyId}`);
+      const current = documents.find((document) => document.id === documentId);
+      if (!current) return null;
+      const renewed = documentOf({ ...current, ...input });
+      documents = documents.map((document) => (document.id === documentId ? renewed : document));
+      return renewed;
+    },
+
     async listTags(companyId) {
       calls.push(`listTags:${companyId}`);
       return [{ name: "Fiscal", documentCount: 1 }];
@@ -294,10 +310,34 @@ describe("busca e filtros", () => {
       responsibleUserId: null,
       branchId: null,
       departmentId: null,
+      expirationStatus: null,
+      today: "2026-09-11",
+      expiringWindowDays: 30,
       sort: "recent",
       page: 1,
       pageSize: 20,
     });
+  });
+
+  it("sem o módulo de vencimentos, a situação não é calculada nem filtrada", async () => {
+    const page = unwrap(await documents.list(context, { status: "EXPIRED", sort: "expiration" }));
+
+    expect(fake.filters.at(-1)).toMatchObject({ expirationStatus: null, sort: "recent" });
+    expect(page.items.every((item) => item.expirationStatus === undefined)).toBe(true);
+  });
+
+  it("com o módulo, filtra pela situação e devolve a de cada documento", async () => {
+    const page = unwrap(
+      await documents.list(context, { status: "EXPIRED", sort: "expiration" }, { expirations: true }),
+    );
+
+    expect(fake.filters.at(-1)).toMatchObject({ expirationStatus: "EXPIRED", sort: "expiration" });
+    expect(page.items[0]?.expirationStatus).toBe("NO_EXPIRATION");
+  });
+
+  it("recusa situação de vencimento desconhecida", async () => {
+    const result = refuse(await documents.list(context, { status: "QUASE_VENCENDO" }, { expirations: true }));
+    expect((result.issues as Array<{ field: string }>)[0]?.field).toBe("status");
   });
 
   it("normaliza a busca e a etiqueta, e trata parâmetro vazio como ausente", async () => {

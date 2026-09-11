@@ -5,6 +5,7 @@ import { LogoutButton } from "@/presentation/screens/logout-button";
 
 const NAV = [
   { href: "/documentos", label: "Documentos" },
+  { href: "/vencimentos", label: "Vencimentos", module: "vencimentos" },
   { href: "/categorias", label: "Categorias" },
   { href: "/builder", label: "Assinatura" },
 ] as const;
@@ -19,13 +20,17 @@ export function AppShell({
   userName,
   companyName,
   current,
+  /** Seção de módulo pago só aparece para quem contratou o módulo. */
+  hasExpirations = false,
   children,
 }: {
   readonly userName: string;
   readonly companyName: string;
   readonly current: NavKey;
+  readonly hasExpirations?: boolean;
   readonly children: ReactNode;
 }) {
+  const sections = NAV.filter((item) => !("module" in item) || hasExpirations);
   return (
     <div className="min-h-screen">
       <header className="border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
@@ -36,7 +41,7 @@ export function AppShell({
           </div>
 
           <nav aria-label="Seções" className="order-3 flex w-full gap-1 sm:order-0 sm:w-auto">
-            {NAV.map((item) => {
+            {sections.map((item) => {
               const active = item.href === current;
               return (
                 <Link
