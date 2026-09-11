@@ -37,9 +37,11 @@ describe("catálogo de módulos no banco", () => {
     );
   });
 
-  it("a limpeza entre testes não apaga o catálogo", async () => {
+  it("a limpeza entre testes não apaga o catálogo nem os preços", async () => {
     await truncateAllTables(prisma);
     expect(await prisma.module.count()).toBe(MODULE_CATALOG.length);
+    // Um preço por módulo: também detecta teste que insere preço e não limpa.
+    expect(await prisma.modulePrice.count()).toBe(MODULE_CATALOG.length);
   });
 });
 
