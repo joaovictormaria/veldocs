@@ -2,7 +2,7 @@
 ## VELDOCS — SaaS Modular de Gestão Documental Empresarial
 
 **Versão:** 0.3
-**Status:** FASE 0 e FASE 1 concluídas; FASE 2 parcial (identidade multiempresa, cadastro, login e sessão em produção); FASE 3 (módulos comerciais) não iniciada
+**Status:** FASE 0 e FASE 1 concluídas; FASE 2 parcial (identidade multiempresa, cadastro, login, sessão, empresa ativa e autorização nas rotas); FASE 3 (módulos comerciais) não iniciada
 **Última auditoria:** 2026-09-11 (ver seção 25)
 **Documento:** Fonte única de verdade do projeto
 **Marca:** VELDOCS
@@ -321,8 +321,8 @@ O objetivo é **mostrar valor**, e não pressionar o usuário.
 - 🟡 PARCIAL — Empresa (tabela `companies` com filiais e setores; criada no cadastro com perfis padrão; gestão da empresa pendente)
 - 🟡 PARCIAL — Usuários (pessoa global `users` com vínculos multiempresa `memberships`; cadastro público; convites e gestão de membros pendentes)
 - 🟡 PARCIAL — Autenticação (cadastro, login por e-mail ou CPF + senha, sessão, logout e logout geral em produção; MFA, verificação de e-mail, recuperação de senha, link mágico e Google pendentes)
-- 🟡 PARCIAL — RBAC/permissões (catálogo de 18 permissões e 5 perfis padrão provisionados por empresa; verificação nas rotas pendente)
-- 🟡 PARCIAL — Multi-tenancy (FKs compostas e vínculo obrigatório no banco; filtro por empresa nas rotas de negócio pendente)
+- 🟡 PARCIAL — RBAC/permissões (catálogo de 18 permissões, 5 perfis padrão e verificação de permissão em todas as rotas de negócio existentes; gestão de perfis e membros — FASE 3)
+- 🟡 PARCIAL — Multi-tenancy (FKs compostas no banco; empresa ativa na sessão e filtro por empresa nas rotas existentes; storage e demais recursos nas fases seguintes)
 - 🔴 NÃO IMPLEMENTADO — Core modular
 - 🔴 NÃO IMPLEMENTADO — Catálogo de módulos
 - 🔴 NÃO IMPLEMENTADO — Entitlements de módulos
@@ -583,12 +583,13 @@ Nunca permitir acesso cruzado.
 - ✅ CONCLUÍDO — Todo recurso empresarial possui vínculo de tenant.
   - Evidência: `company_id NOT NULL` em `branches`, `departments`, `memberships`, `roles`, `user_roles`, `document_categories`, `documents`; `users` é a pessoa global e acessa empresas por `memberships` (DEC-009).
   - Teste: `tests/integration/database/connection-and-migrations.test.ts` — passou (local e CI, 2026-09-11).
-- 🔴 NÃO IMPLEMENTADO — Toda leitura valida tenant (não há rotas de negócio; previsto na FASE 2, parte 2).
+- 🟡 PARCIAL — Toda leitura valida tenant: as rotas de negócio existentes (`/api/company`, `/api/company/members`, `/api/company/members/[userId]`) usam só a empresa ativa da sessão, com vínculo e empresa ativos. Cada rota nova deve usar `authorizeRequest`.
+  - Testes: `tests/integration/access/access-control.test.ts` e `tests/e2e/access.spec.ts` — passaram (local, 2026-09-11).
 - 🟡 PARCIAL — Toda escrita valida tenant: o banco rejeita vínculos entre empresas por FKs compostas, inclusive pessoa que não é membro (DEC-010); validação nas rotas de negócio pendente.
   - Teste: `tests/integration/database/tenant-isolation-constraints.test.ts` (17 testes) — passou.
 - 🔴 NÃO IMPLEMENTADO — Toda exclusão valida tenant.
 - 🔴 NÃO IMPLEMENTADO — Storage possui isolamento lógico por tenant (o contrato `StorageProvider` já exige `companyId`).
-- 🟡 PARCIAL — Testes de cross-tenant existem (nível banco; nível API/IDOR pendente).
+- ✅ CONCLUÍDO — Testes de cross-tenant existem: nível banco (17 testes), autorização e consultas com PostgreSQL (IDOR, empresa sem vínculo, vínculo e empresa suspensos) e E2E das rotas (membro de outra empresa → 404; seleção de empresa alheia → 404) — passaram. Estender a cada novo recurso.
 - 🔴 NÃO IMPLEMENTADO — Entitlements são associados ao tenant (FASE 3).
 
 ---
@@ -624,12 +625,15 @@ Referências principais:
 
 ## 7.3 Autorização
 
-- 🟡 PARCIAL — RBAC (catálogo `recurso.acao` e 5 perfis padrão provisionados; verificação nas rotas pendente)
-- 🟡 PARCIAL — Permissões por ação (18 permissões no catálogo; ainda não verificadas em rotas)
-- 🟡 PARCIAL — Autorização server-side (sessão validada no servidor em `GET /api/auth/session`; permissões pendentes)
-- 🟡 PARCIAL — Verificação de tenant (garantida no banco; rotas pendentes)
-- 🔴 NÃO IMPLEMENTADO — Verificação do recurso
-- 🔴 NÃO IMPLEMENTADO — Verificação de entitlement/módulo (FASE 3)
+> Cadeia implementada em `src/application/access/authorize.ts`: sessão → pessoa ativa → empresa ativa → vínculo ACTIVE em empresa ACTIVE → permissão → entitlement do módulo → recurso. Detalhes em `docs/architecture/fundacao-tecnica.md`.
+
+- ✅ CONCLUÍDO — RBAC: permissões calculadas pela união dos perfis do vínculo, verificadas a cada requisição.
+  - Testes: unit `tests/unit/application/access/authorize-and-select.test.ts`; integração `tests/integration/access/access-control.test.ts` (VISUALIZADOR lê a empresa mas recebe `forbidden` em membros) — passaram.
+- ✅ CONCLUÍDO — Permissões por ação: cada rota exige uma permissão `recurso.acao` (`company.read`, `members.read`).
+- ✅ CONCLUÍDO — Autorização server-side: `authorizeRequest` roda no servidor antes de qualquer consulta; o frontend não participa da decisão.
+- ✅ CONCLUÍDO — Verificação de tenant: empresa vinda só da sessão, com vínculo e empresa ativos; troca de empresa por `POST /api/auth/active-company` com resposta idêntica para empresa inexistente, sem vínculo ou suspensa (unit + integração + E2E — passaram).
+- 🟡 PARCIAL — Verificação do recurso: consultas de membros sempre filtradas pela empresa do contexto (outra empresa → 404); demais recursos nas fases seguintes.
+- 🟡 PARCIAL — Verificação de entitlement/módulo: a cadeia exige o módulo de cada permissão (`permission-modules.ts`) e bloqueia com `module_not_enabled` (integração — passou); implementação provisória só com o Core até o catálogo de módulos da FASE 3.
 
 ## 7.4 Upload
 
@@ -659,8 +663,8 @@ Referências principais:
 
 - 🟡 PARCIAL — Rate limiting (rotas de autenticação)
 - 🟡 PARCIAL — Input validation (Zod nas rotas de autenticação; `Content-Type: application/json` obrigatório e corpo limitado a 16 KB — unit + E2E — passaram)
-- 🔴 NÃO IMPLEMENTADO — Proteção BOLA/IDOR (não há rotas de recursos; FKs compostas no banco já impedem vínculos cross-tenant)
-- 🔴 NÃO IMPLEMENTADO — Proteção de função
+- 🟡 PARCIAL — Proteção BOLA/IDOR: `GET /api/company/members/[userId]` busca sempre por `(empresa da sessão, pessoa)` e responde 404 para outra empresa, inexistente ou id inválido (integração + E2E — passaram); aplicar a cada novo recurso.
+- 🟡 PARCIAL — Proteção de função: cada rota exige sua permissão (perfil sem permissão → 403); funções administrativas ainda não existem.
 - 🟡 PARCIAL — Limites de recursos (corpo de 16 KB; timeout no health check; limites por plano pendentes)
 - [ ] Proteção contra SSRF quando aplicável (não há chamadas externas a partir de entrada do usuário)
 - [ ] API versioning (rotas atuais em `/api/...`, sem versão)
@@ -692,7 +696,7 @@ Referências principais:
 ## 7.9 Privacidade/LGPD
 
 - 🟡 PARCIAL — Minimização de dados: CPF opcional e armazenado só como HMAC + AES-256-GCM (DEC-015); auditoria sem senha, token, e-mail digitado ou CPF (integração — passou).
-- 🟡 PARCIAL — Controle de acesso (autenticação e isolamento no banco; RBAC nas rotas pendente).
+- 🟡 PARCIAL — Controle de acesso (autenticação, RBAC e empresa ativa nas rotas existentes; isolamento também no banco).
 - [ ] Retenção.
 - [ ] Exclusão.
 - [ ] Exportação.
@@ -1050,7 +1054,7 @@ Tipos:
 
 Registrar, quando aplicável:
 
-> **Status (2026-09-11):** 🟡 PARCIAL — `audit_logs` é append-only (UPDATE/DELETE bloqueados por trigger). ✅ Registrados: `auth.account_registered`, `company.created`, `auth.login_succeeded`, `auth.login_failed`, `auth.login_rate_limited`, `auth.register_rate_limited`, `auth.logout`, `auth.logout_all` (integração — passou). Os demais eventos abaixo ainda não existem.
+> **Status (2026-09-11):** 🟡 PARCIAL — `audit_logs` é append-only (UPDATE/DELETE bloqueados por trigger). ✅ Registrados: `auth.account_registered`, `company.created`, `auth.login_succeeded`, `auth.login_failed`, `auth.login_rate_limited`, `auth.register_rate_limited`, `auth.logout`, `auth.logout_all`, `auth.active_company_selected` (integração — passou). Os demais eventos abaixo ainda não existem.
 
 - login/logout;
 - upload;
@@ -1073,7 +1077,7 @@ Registrar, quando aplicável:
 
 ## 16.1 Unitários
 
-> Suíte atual: 11 arquivos, 156 testes — passaram (local e CI run `34549156042`, 2026-09-11).
+> Suíte atual: 14 arquivos, 178 testes — passaram (local, 2026-09-11; CI no PR da FASE 2 parte 2).
 
 - 🟡 PARCIAL — Regras de negócio (identidade: CPF, e-mail, senha, identificador de login; catálogo de perfis; gestor de sessão; login e cadastro; ambiente; health check; fronteiras de arquitetura)
 - 🔴 NÃO IMPLEMENTADO — Cálculo de preço modular
@@ -1083,19 +1087,19 @@ Registrar, quando aplicável:
 
 ## 16.2 Integração
 
-> Suíte atual: 4 arquivos, 62 testes com PostgreSQL real — passaram (local e CI).
+> Suíte atual: 5 arquivos, 69 testes com PostgreSQL real — passaram (local e CI).
 
 - ✅ CONCLUÍDO — Banco (conexão, migrações, tabelas, FKs cross-tenant, unicidade, CHECKs, trigger append-only, health probes)
 - ✅ CONCLUÍDO — Auth (`tests/integration/auth/auth-services.test.ts`, 13 testes)
-- 🟡 PARCIAL — RBAC (FKs de perfis e vínculos; provisionamento dos perfis no cadastro; verificação de permissão pendente)
-- 🟡 PARCIAL — Multi-tenancy (nível banco)
+- ✅ CONCLUÍDO — RBAC (`tests/integration/access/access-control.test.ts`: provisionamento, união de perfis, perfil sem permissão, vínculo e empresa suspensos)
+- ✅ CONCLUÍDO — Multi-tenancy (nível banco + empresa ativa, pessoa multiempresa, seleção de empresa sem vínculo e consultas sem vazamento entre empresas)
 - 🔴 NÃO IMPLEMENTADO — Documentos (apenas constraints da tabela)
 - 🔴 NÃO IMPLEMENTADO — Storage
 - 🔴 NÃO IMPLEMENTADO — Billing
 
 ## 16.3 E2E
 
-> Suíte atual: 8 testes Playwright contra `pnpm start` — passaram (local e CI).
+> Suíte atual: 12 testes Playwright — passaram (local; CI roda contra `pnpm start`).
 
 - ✅ CONCLUÍDO — Cadastro (`tests/e2e/auth.spec.ts`: cookie HttpOnly/SameSite, sessão, login por CPF, logout, credenciais inválidas, origem e JSON obrigatórios)
 - 🔴 NÃO IMPLEMENTADO — Builder
@@ -1108,13 +1112,13 @@ Registrar, quando aplicável:
 
 ## 16.4 Segurança
 
-- 🟡 PARCIAL — Cross-tenant (17 testes no nível banco; nível API pendente)
-- 🔴 NÃO IMPLEMENTADO — BOLA/IDOR
+- ✅ CONCLUÍDO — Cross-tenant (banco, autorização com PostgreSQL e E2E das rotas)
+- 🟡 PARCIAL — BOLA/IDOR (rotas de membros: outra empresa, inexistente e id inválido → 404; demais recursos nas fases seguintes)
 - 🔴 NÃO IMPLEMENTADO — Upload
 - 🔴 NÃO IMPLEMENTADO — Storage
 - 🟡 PARCIAL — Sessão (hash do token, fixation, expiração, renovação, revogação; falta teste de sequestro/reuso em navegador)
 - ✅ CONCLUÍDO — Rate limit (bloqueio por conta e contagem concorrente)
-- 🟡 PARCIAL — API (origem, `Content-Type`, tamanho do corpo e respostas genéricas nas rotas de autenticação)
+- 🟡 PARCIAL — API (origem, `Content-Type`, tamanho do corpo e respostas genéricas; 401/403/404 padronizados nas rotas de negócio)
 - 🔴 NÃO IMPLEMENTADO — WhatsApp
 - 🔴 NÃO IMPLEMENTADO — IA/prompt injection
 
@@ -1258,12 +1262,12 @@ As recomendações devem ser:
 
 ## FASE 2 — Segurança base
 
-**Status da fase:** 🟡 PARCIAL — parte 1 (identidade multiempresa, cadastro, login e sessão) em produção desde 2026-09-11.
+**Status da fase:** 🟡 PARCIAL — parte 1 (identidade multiempresa, cadastro, login e sessão) em produção desde 2026-09-11; parte 2 (empresa ativa e autorização nas rotas) implementada em 2026-09-11. Pendentes: MFA, verificação de e-mail, recuperação de senha, link mágico, Google, CSP/HSTS, logs e rate limiting nas rotas de negócio.
 
 - 🟡 PARCIAL — Autenticação (ver 7.1)
 - ✅ CONCLUÍDO — Sessão (ver 7.2)
-- 🟡 PARCIAL — Multi-tenancy (ver 6.2)
-- 🟡 PARCIAL — RBAC (ver 7.3)
+- 🟡 PARCIAL — Multi-tenancy (empresa ativa e filtro por empresa nas rotas existentes; ver 6.2)
+- ✅ CONCLUÍDO — RBAC (mecanismo de autorização aplicado a todas as rotas de negócio existentes; ver 7.3)
 - 🟡 PARCIAL — Rate limiting (autenticação)
 - 🟡 PARCIAL — Headers (`X-Powered-By` removido e HTTP → HTTPS 301 em produção; CSP com nonce e HSTS pendentes)
 - ✅ CONCLUÍDO — Secrets (variáveis validadas; `.env*` fora do Git; `APP_ENCRYPTION_KEY`/`APP_HMAC_KEY` configuradas no Railway sem exibição; rotação de chaves pendente)
@@ -1280,7 +1284,7 @@ As recomendações devem ser:
 - 🟡 PARCIAL — Roles (5 perfis padrão por empresa)
 - 🟡 PARCIAL — Permissions (catálogo de 18 permissões)
 - 🔴 NÃO IMPLEMENTADO — Catálogo de módulos
-- 🔴 NÃO IMPLEMENTADO — Entitlements
+- 🔴 NÃO IMPLEMENTADO — Entitlements (a cadeia de autorização já verifica o módulo de cada permissão; falta o registro de módulos contratados por empresa)
 - 🔴 NÃO IMPLEMENTADO — Builder
 - 🔴 NÃO IMPLEMENTADO — Preço em tempo real
 - 🔴 NÃO IMPLEMENTADO — Trial state machine
@@ -1543,15 +1547,15 @@ Motivo: banco gerenciado, rede privada entre app e banco, HTTPS automático e de
 
 **Produto:** 🟡 PARCIAL (definição completa; identidade visual pendente)
 **Arquitetura:** ✅ CONCLUÍDO (monólito modular em camadas; entitlements ainda não existem)
-**Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit e CSRF nas rotas de auth; RBAC nas rotas, MFA, CSP/HSTS e logs pendentes)
+**Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit e CSRF nas rotas de auth; empresa ativa e RBAC nas rotas; MFA, CSP/HSTS e logs pendentes)
 **Frontend:** 🔴 NÃO IMPLEMENTADO (somente página inicial da fundação)
-**Backend:** 🟡 PARCIAL (autenticação e health check; sem módulos de negócio)
+**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização e consultas da empresa e dos membros; sem módulos de negócio)
 **Banco:** 🟡 PARCIAL (entidades de identidade, empresa, acesso, documentos e auditoria; faltam Module, ModulePrice, Entitlement, Subscription e Trial)
 **Storage:** 🔴 NÃO IMPLEMENTADO
 **Billing:** 🔴 NÃO IMPLEMENTADO
 **WhatsApp:** 🔴 NÃO IMPLEMENTADO
 **IA:** 🔴 NÃO IMPLEMENTADO
-**Testes:** 🟡 PARCIAL (156 unitários, 62 integração, 8 E2E; CI bloqueando o deploy)
+**Testes:** 🟡 PARCIAL (178 unitários, 69 integração, 12 E2E; CI bloqueando o deploy)
 
 ## Bloqueadores
 
@@ -1618,3 +1622,33 @@ Não foi criada conta de teste em produção: a auditoria append-only impediria 
 - Enviar logo e cor padrão do sistema.
 - Escolher o serviço de e-mail transacional e criar as credenciais OAuth do Google.
 - Decidir sobre backups (plano Pro no Railway ou alternativa) e proteção da `main`.
+
+## 2026-09-11 — FASE 2 (parte 2): empresa ativa e autorização nas rotas
+
+### O que foi feito
+
+| Item | Evidência |
+|---|---|
+| Cadeia de autorização | `src/application/access/authorize.ts`: sessão → pessoa ativa → empresa ativa → vínculo ACTIVE em empresa ACTIVE → permissão (união dos perfis) → entitlement do módulo |
+| Empresa ativa | `POST /api/auth/active-company` (`select-active-company.ts`); resposta idêntica para empresa inexistente, sem vínculo ou suspensa; auditoria `auth.active_company_selected` |
+| Módulo de cada permissão | `src/domain/access-control/permission-modules.ts` (todas no Core); `createCoreOnlyEntitlementService` provisório até a FASE 3 |
+| Rotas de negócio | `GET /api/company` (`company.read`), `GET /api/company/members` e `GET /api/company/members/[userId]` (`members.read`), sempre com `authorizeRequest` |
+| Consultas | `src/application/access/company-queries.ts` só aceita `AuthorizedContext`; `prisma-access-control-repository.ts` filtra sempre por empresa |
+| Respostas | `401 unauthenticated`, `403 active_company_required`, `403 forbidden`, `403 module_not_enabled`, `404` para recurso fora da empresa |
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm lint` / `tsc --noEmit` | ✅ sem erros |
+| `pnpm test` | ✅ 14 arquivos, 178 testes |
+| `pnpm test:integration` | ✅ 5 arquivos, 69 testes (novos: OWNER, VISUALIZADOR sem acesso a membros, união de perfis, suspensão imediata, pessoa em duas empresas, IDOR, módulo não habilitado) |
+| `pnpm test:e2e` | ✅ 12 testes (novos: dados da empresa ativa, membro de outra empresa → 404, seleção de empresa alheia → 404, ids inválidos → 404, sem sessão → 401, origem obrigatória) |
+
+Verificação em produção: após o merge e o deploy desta mudança.
+
+### Observações
+
+- Não há gestão de membros e perfis nas rotas (convites, atribuição de perfis): isso pertence à FASE 3.
+- MFA obrigatório para OWNER/ADMIN ainda não é exigido na cadeia de autorização (MFA não implementado).
+- Negações de acesso ainda não são registradas em log estruturado (logs pendentes).
