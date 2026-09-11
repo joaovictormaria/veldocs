@@ -67,6 +67,7 @@ model Company {
   userRoles          UserRole[]
   documentCategories DocumentCategory[]
   documents          Document[]
+  tags               Tag[]
   auditLogs          AuditLog[]
   modules            CompanyModule[]
   subscription       Subscription?
@@ -300,6 +301,9 @@ model Document {
   description       String?
   issueDate         DateTime? @map("issue_date") @db.Date
   expirationDate    DateTime? @map("expiration_date") @db.Date
+  /// Título, descrição e tags em minúsculas e sem acentos: a busca não depende
+  /// de acentuação nem de extensão do PostgreSQL. Mantido pelo repositório.
+  searchText        String    @default("") @map("search_text")
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
@@ -310,6 +314,7 @@ model Document {
   department        Department?       @relation(fields: [companyId, departmentId], references: [companyId, id], onDelete: Restrict)
   responsibleMember Membership?       @relation("DocumentResponsibleMember", fields: [companyId, responsibleUserId], references: [companyId, userId], onDelete: Restrict)
   createdByMember   Membership?       @relation("DocumentCreatedByMember", fields: [companyId, createdById], references: [companyId, userId], onDelete: Restrict)
+  tags              DocumentTag[]
 
   @@unique([companyId, id])
   @@index([companyId, expirationDate])
@@ -319,6 +324,40 @@ model Document {
   @@index([companyId, responsibleUserId])
   @@index([companyId, createdById])
   @@map("documents")
+}
+
+/// Etiqueta livre da empresa (MASTER SPEC 10.1). `normalizedName` (minúsculas,
+/// sem acentos) garante que "Fiscal" e "fiscal" sejam a mesma etiqueta.
+model Tag {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  companyId      String   @map("company_id") @db.Uuid
+  name           String   @db.VarChar(40)
+  normalizedName String   @map("normalized_name") @db.VarChar(40)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company   Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  documents DocumentTag[]
+
+  @@unique([companyId, id])
+  @@unique([companyId, normalizedName])
+  @@map("tags")
+}
+
+/// Etiqueta aplicada a um documento. As FKs compostas garantem que documento e
+/// etiqueta sejam da MESMA empresa.
+model DocumentTag {
+  companyId  String   @map("company_id") @db.Uuid
+  documentId String   @map("document_id") @db.Uuid
+  tagId      String   @map("tag_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  document Document @relation(fields: [companyId, documentId], references: [companyId, id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [companyId, tagId], references: [companyId, id], onDelete: Restrict)
+
+  @@id([companyId, documentId, tagId])
+  @@index([companyId, tagId])
+  @@map("document_tags")
 }
 
 /// Trilha de auditoria append-only. `companyId` é opcional para eventos sem

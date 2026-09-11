@@ -11,6 +11,8 @@ import { createSessionManager } from "@/application/auth/session-manager";
 import { createSessionUseCases } from "@/application/auth/session-use-cases";
 import { createCatalogQueries } from "@/application/billing/catalog-queries";
 import { createSubscriptionUseCases } from "@/application/billing/subscription-use-cases";
+import { createCategoryManagement } from "@/application/documents/manage-categories";
+import { createDocumentManagement } from "@/application/documents/manage-documents";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { createDatabaseEntitlementService } from "@/infrastructure/access/database-entitlements";
 import { getEnv } from "@/infrastructure/config/env";
@@ -21,6 +23,7 @@ import {
 import { createPrismaAuditLogger } from "@/infrastructure/database/prisma-audit-logger";
 import { createPrismaBillingCatalogRepository } from "@/infrastructure/database/prisma-billing-catalog-repository";
 import { createPrismaCompanyManagementRepository } from "@/infrastructure/database/prisma-company-management-repository";
+import { createPrismaDocumentRepository } from "@/infrastructure/database/prisma-document-repository";
 import { createPrismaMfaRepository } from "@/infrastructure/database/prisma-mfa-repository";
 import { getPrismaClient } from "@/infrastructure/database/prisma-client";
 import { createPrismaIdentityRepository } from "@/infrastructure/database/prisma-identity-repository";
@@ -59,6 +62,7 @@ export function buildAuthServices(prisma: PrismaClient, keys: ApplicationKeys, n
   const access = createPrismaAccessControlRepository(prisma);
   const billingCatalog = createPrismaBillingCatalogRepository(prisma);
   const mfa = createPrismaMfaRepository(prisma, keys);
+  const documents = createPrismaDocumentRepository(prisma);
 
   return {
     login: createLoginUseCase(dependencies),
@@ -78,6 +82,8 @@ export function buildAuthServices(prisma: PrismaClient, keys: ApplicationKeys, n
       audit,
       now,
     }),
+    categories: createCategoryManagement({ repository: documents, audit, now }),
+    documents: createDocumentManagement({ repository: documents, audit, now }),
     catalog: createCatalogQueries({ repository: billingCatalog, now }),
     subscriptions: createSubscriptionUseCases({
       repository: createPrismaSubscriptionRepository(prisma),

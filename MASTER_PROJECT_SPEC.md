@@ -369,11 +369,11 @@ O objetivo é **mostrar valor**, e não pressionar o usuário.
 - 🔴 NÃO IMPLEMENTADO — Core modular
 - 🔴 NÃO IMPLEMENTADO — Catálogo de módulos
 - 🔴 NÃO IMPLEMENTADO — Entitlements de módulos
-- 🟡 PARCIAL — Documentos (tabela `documents` com metadados, responsável, criador e validade; sem API nem tela)
-- 🟡 PARCIAL — Categorias (tabela `document_categories` com subcategorias; sem API nem tela)
+- 🟡 PARCIAL — Documentos (API de metadados: criar, editar, excluir logicamente, responsável, filial, setor, datas e etiquetas — `docs/api/documentos.md`; arquivo, upload e tela pendentes)
+- 🟡 PARCIAL — Categorias (API com árvore de até 3 níveis, nome único entre irmãs e exclusão que recusa categoria em uso; tela pendente)
 - 🔴 NÃO IMPLEMENTADO — Upload seguro
 - 🔴 NÃO IMPLEMENTADO — Storage privado (somente contrato `StorageProvider`)
-- 🔴 NÃO IMPLEMENTADO — Pesquisa
+- 🟡 PARCIAL — Pesquisa (busca sem acento em título, descrição e etiquetas, com filtros, ordenação e paginação na API; tela pendente)
 - 🔴 NÃO IMPLEMENTADO — Vencimentos (somente colunas `issue_date`/`expiration_date`)
 - 🔴 NÃO IMPLEMENTADO — Alertas
 - 🔴 NÃO IMPLEMENTADO — Dashboard
@@ -842,7 +842,7 @@ Entidades existentes além da lista: `Membership` (vínculo pessoa ↔ empresa),
 
 - ✅ CONCLUÍDO — Foreign keys (inclusive 10+ FKs compostas por tenant e FKs para o vínculo `(company_id, user_id)`).
 - ✅ CONCLUÍDO — Unique constraints para chaves de negócio (`companies.slug`, `users.email`, `users.cpf_lookup_hash`, `permissions.key`, `roles(company_id, key)`, `branches(company_id, code)`, `memberships(company_id, user_id)`).
-- 🟡 PARCIAL — Índices adequados (índices por `company_id` e FKs; revisar com as consultas reais da FASE 4).
+- 🟡 PARCIAL — Índices adequados (índices por `company_id` e FKs, usados pelos filtros de documentos; falta índice de texto para a busca — hoje uma varredura por empresa, aceitável no volume atual).
 - ✅ CONCLUÍDO — tenant_id obrigatório onde aplicável (`company_id NOT NULL` nas entidades de empresa).
 - ✅ CONCLUÍDO — Integridade referencial (`ON DELETE RESTRICT` por padrão; CHECKs de e-mail, CPF, sessão, permissões e rate limit; trigger append-only).
 - ✅ CONCLUÍDO — Migrações controladas (versionadas; aplicadas com `migrate deploy` no pre-deploy do Railway; a migração de identidade preserva dados — verificado em banco descartável).
@@ -851,28 +851,32 @@ Entidades existentes além da lista: `Membership` (vínculo pessoa ↔ empresa),
 
 # 10. MÓDULOS DO PRODUTO
 
-> **Status (2026-09-11):** 🔴 NÃO IMPLEMENTADO em todos os módulos desta seção. Existem apenas as tabelas `documents` e `document_categories` (com responsável, validade e categorias), sem API, regras ou telas.
+> **Status (2026-09-11):** 🟡 PARCIAL no módulo Documentos (10.1): API de metadados, categorias, etiquetas, busca e filtros (`docs/api/documentos.md`), sem arquivo nem tela. Os demais módulos desta seção continuam 🔴 NÃO IMPLEMENTADOS.
 
 ## 10.1 Documentos
 
-- [ ] Criar
-- [ ] Editar
-- [ ] Excluir
-- [ ] Visualizar
-- [ ] Download
-- [ ] Upload
-- [ ] Categorias
-- [ ] Tags
-- [ ] Responsável
-- [ ] Validade
-- [ ] Histórico
-- [ ] Versionamento
-- [ ] Busca
-- [ ] Filtros
+> **Status (2026-09-11):** 🟡 PARCIAL — metadados completos pela API (`docs/api/documentos.md`). Arquivo (upload/download) é da FASE 5 e versionamento da FASE 6.
+
+- [x] Criar — `POST /api/documents` (`documents.create`)
+- [x] Editar — `PATCH /api/documents/[documentId]`
+- [x] Excluir — exclusão lógica; nada é apagado
+- [x] Visualizar — `GET /api/documents/[documentId]` (metadados)
+- [ ] Download — depende do storage (FASE 5)
+- [ ] Upload — depende do storage (FASE 5)
+- [x] Categorias — árvore de até 3 níveis (DEC-032)
+- [x] Tags — etiquetas por empresa, sem duplicar por acento ou maiúscula (DEC-032)
+- [x] Responsável — membro ativo da empresa
+- [x] Validade — emissão e validade como datas de calendário, validade nunca antes da emissão
+- [x] Histórico — auditoria de criação, edição (com campos alterados) e exclusão
+- [ ] Versionamento — FASE 6
+- [x] Busca — sem depender de acento, em título, descrição e etiquetas (DEC-031)
+- [x] Filtros — categoria (com subcategorias), etiqueta, responsável, filial, setor, ordenação e paginação
 
 ## 10.2 Vencimentos
 
-- [ ] Datas de emissão/validade
+> **Status (2026-09-11):** 🟡 PARCIAL — as datas existem e são validadas na API de documentos; situação automática, alertas e renovação são a etapa seguinte da FASE 4, no módulo Controle de vencimentos.
+
+- [x] Datas de emissão/validade
 - [ ] Status automático
 - [ ] Alertas
 - [ ] Renovação
@@ -1374,12 +1378,22 @@ As recomendações devem ser:
 
 ## FASE 4 — Núcleo documental
 
-- 🟡 PARCIAL — Documentos (entidade)
-- 🟡 PARCIAL — Categorias (entidade)
-- 🔴 NÃO IMPLEMENTADO — Tags
-- 🟡 PARCIAL — Responsáveis (coluna com FK para o vínculo da empresa)
-- 🔴 NÃO IMPLEMENTADO — Pesquisa
-- 🔴 NÃO IMPLEMENTADO — Vencimentos (colunas de emissão e validade)
+**Status da fase:** 🟡 PARCIAL. A API de metadados está pronta (documentos, categorias, etiquetas, busca e filtros); faltam situação de vencimento com alertas, dashboard e as telas.
+
+- ✅ CONCLUÍDO — Documentos (metadados pela API)
+  - Evidência: `GET/POST /api/documents` e `GET/PATCH/DELETE /api/documents/[documentId]` com `documents.read/create/update/delete`; `src/application/documents/manage-documents.ts`; `docs/api/documentos.md`; auditoria `document.created/updated/deleted`.
+  - Testes: `tests/unit/application/documents/manage-documents.test.ts`, `tests/integration/documents/documents.test.ts` e `tests/e2e/documents.spec.ts` — passaram (local, 2026-09-11).
+  - Pendente: o arquivo em si (FASE 5) e a tela.
+- ✅ CONCLUÍDO — Categorias (árvore de até 3 níveis)
+  - Evidência: `GET/POST /api/categories` e `GET/PATCH/DELETE /api/categories/[categoryId]` (`categories.read`/`categories.manage`); nome único entre irmãs, sem ciclo, exclusão lógica que recusa categoria em uso; caminho completo em cada resposta (DEC-032).
+- ✅ CONCLUÍDO — Tags
+  - Evidência: tabelas `tags` e `document_tags`; etiqueta é da empresa e não duplica por acento ou maiúscula; `GET /api/tags` lista as em uso com a contagem de documentos vivos (DEC-032).
+- ✅ CONCLUÍDO — Responsáveis
+  - Evidência: `responsibleUserId` precisa ser membro ativo; só é reconferido quando muda, para suspensão posterior não travar a edição do documento.
+- 🟡 PARCIAL — Pesquisa
+  - Evidência: busca sem acento por título, descrição e etiquetas (coluna `documents.search_text`, DEC-031), com filtros por categoria (incluindo subcategorias), etiqueta, responsável, filial e setor, ordenação e paginação.
+  - Pendente: tela e índice de texto quando o volume justificar.
+- 🔴 NÃO IMPLEMENTADO — Vencimentos (situação automática e renovação; as datas já existem e são validadas)
 - 🔴 NÃO IMPLEMENTADO — Alertas
 - 🔴 NÃO IMPLEMENTADO — Dashboard
 
@@ -1790,14 +1804,42 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 ---
 
+## DEC-031 — Busca sem acento por coluna normalizada
+
+**Status:** ✅ CONCLUÍDO (implementado na FASE 4)
+
+**Decisão:** cada documento guarda em `documents.search_text` o título, a descrição e as etiquetas já em minúsculas e sem acento; a busca normaliza os termos da mesma forma e exige que todos apareçam (até 6 termos).
+
+**Motivo:** a alternativa natural seria a extensão `unaccent` do PostgreSQL, que exige privilégio de superusuário para ser criada — algo que não se pode garantir num banco gerenciado, e que faria a migração falhar no deploy. Com a coluna normalizada, "certidao" encontra "Certidão" sem depender de nada instalado no servidor, e a mesma regra vale no teste e em produção.
+
+**Custo aceito:** a busca é `LIKE` com curinga nas duas pontas, ou seja, varredura dentro da empresa. No volume de hoje isso é irrelevante; quando justificar, entra um índice de texto (trigrama ou `tsvector`) sobre a mesma coluna, sem mudar a API.
+
+**Evidência:** `src/domain/documents/search-text.ts`, `src/infrastructure/database/prisma-document-repository.ts`; `tests/unit/domain/documents/document-rules.test.ts` e `tests/integration/documents/documents.test.ts` (busca com e sem acento, vários termos, descrição e etiqueta) — passaram.
+
+---
+
+## DEC-032 — Categorias em até 3 níveis e etiquetas por empresa
+
+**Status:** ✅ CONCLUÍDO (implementado na FASE 4)
+
+**Decisão:** as categorias formam uma árvore de no máximo 3 níveis, com nome único entre irmãs (comparado sem acento e sem maiúsculas) e sem ciclos — mover uma categoria leva a subárvore junto e o limite vale para o resultado. As etiquetas são livres, pertencem à empresa e são identificadas pelo nome normalizado: "Fiscal", "fiscal" e "FISCAL" são a mesma, e a primeira grafia é a que fica.
+
+**Motivos:** a spec (10.1) pede categorias com subcategorias e tags livres, sem definir profundidade. Um limite explícito mantém a navegação compreensível e o caminho legível na tela; sem limite, a árvore vira um labirinto e o filtro por categoria (que inclui as descendentes) fica imprevisível. Nas etiquetas, normalizar evita a lista encher de variações da mesma palavra.
+
+**Implementação:** as regras de árvore ficam no domínio (`src/domain/documents/category-tree.ts`) e dependem de ler a árvore antes de gravar; por isso as escritas de categoria de uma empresa são serializadas por `pg_advisory_xact_lock`, senão duas requisições simultâneas passariam cada uma na sua checagem. No banco, `tags(company_id, normalized_name)` é único e os CHECKs impedem nome em branco e categoria filha de si mesma.
+
+**Evidência:** `src/domain/documents/category-tree.ts`, `src/domain/documents/tags.ts`, migração `documents_categories_tags`; `tests/integration/documents/documents.test.ts` (três níveis e recusa do quarto, nome repetido entre irmãs, ciclo, mover subárvore, etiqueta reaproveitada) — passaram.
+
+---
+
 # 24. STATUS GERAL
 
 **Produto:** ✅ CONCLUÍDO (definição e identidade visual; vetores da logo pendentes)
 **Arquitetura:** ✅ CONCLUÍDO (monólito modular em camadas; entitlements por empresa na cadeia de autorização)
 **Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit, CSRF, empresa ativa, RBAC, MFA para OWNER/ADMIN, CSP com nonce, HSTS e logs estruturados; verificação de e-mail e recuperação de senha no backlog)
 **Frontend:** 🟡 PARCIAL (Tailwind CSS; telas de cadastro, login, segundo fator, Builder e convite; sem dashboard nem telas de documentos)
-**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial, entitlements por empresa, API do Builder com início do trial e troca de módulos durante o trial, gestão de membros com convites; sem módulos de negócio)
-**Banco:** 🟡 PARCIAL (identidade, empresa, acesso, documentos, auditoria, catálogo comercial com preços e kits, módulos por empresa e assinatura com prazos de retenção)
+**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial, entitlements por empresa, API do Builder com início do trial e troca de módulos durante o trial, gestão de membros com convites; núcleo documental com categorias, etiquetas, busca e filtros — sem arquivo e sem os demais módulos de negócio)
+**Banco:** 🟡 PARCIAL (identidade, empresa, acesso, documentos com texto de busca e etiquetas, auditoria, catálogo comercial com preços e kits, módulos por empresa e assinatura com prazos de retenção)
 **Storage:** 🔴 NÃO IMPLEMENTADO
 **Billing:** 🔴 NÃO IMPLEMENTADO
 **WhatsApp:** 🔴 NÃO IMPLEMENTADO
@@ -2358,3 +2400,40 @@ Verificação em produção: após o merge e o deploy. Sem migração.
 
 - Troca de módulos em assinatura paga fica para a FASE 16, junto com o pagamento (DEC-030).
 - A sequência pedida — membros e convites, telas com o Builder e troca de módulos durante o trial — está concluída. A FASE 3 segue 🟡 PARCIAL por perfis personalizados e pela exclusão de contas após a retenção.
+
+---
+
+## 2026-09-11 — FASE 4: núcleo documental (metadados, categorias, etiquetas e busca)
+
+### O que foi feito
+
+| Item | Evidência |
+|---|---|
+| Documentos | `GET/POST /api/documents` e `GET/PATCH/DELETE /api/documents/[documentId]`: título, descrição, categoria, filial, setor, responsável, emissão, validade e etiquetas |
+| Categorias | `GET/POST /api/categories` e `GET/PATCH/DELETE /api/categories/[categoryId]`: árvore de até 3 níveis com caminho completo, nome único entre irmãs, sem ciclo (DEC-032) |
+| Etiquetas | tabelas `tags` e `document_tags`; a etiqueta é da empresa e não duplica por acento ou maiúscula; `GET /api/tags` com a contagem de documentos vivos |
+| Busca | `q` sem depender de acento em título, descrição e etiquetas, via `documents.search_text` (DEC-031) |
+| Filtros | categoria (incluindo subcategorias), etiqueta, responsável, filial, setor, ordenação (`recent`/`title`/`created`) e paginação |
+| Regras | responsável precisa ser membro ativo (reconferido só quando muda); setor precisa combinar com a filial; validade nunca antes da emissão; datas de calendário sem fuso |
+| Exclusão | lógica, em documentos e categorias: some das listagens, nada é apagado (MASTER SPEC 17.2) |
+| Banco | migração `20260911173626_documents_categories_tags`: coluna `search_text`, tabelas `tags` e `document_tags` e CHECKs de título, datas, nome e etiqueta |
+| Auditoria | `document.created` (referências e contagens), `document.updated` (campos alterados), `document.deleted`, `category.created/updated/deleted` — sem título nem conteúdo |
+| Documentação | `docs/api/documentos.md`, modelo de dados, DEC-031 e DEC-032 |
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm lint` / `tsc --noEmit` | ✅ sem erros |
+| `pnpm test` | ✅ 33 arquivos, 414 testes (novos: busca sem acento, etiquetas normalizadas, árvore de categorias, datas de calendário, validações e auditoria dos casos de uso) |
+| `pnpm test:integration` | ✅ 13 arquivos, 161 testes (novos: vínculos de outra empresa recusados campo a campo, setor × filial, responsável suspenso, busca e filtros, paginação, exclusão lógica, três níveis de categoria, ciclo, nome repetido, etiquetas reaproveitadas) |
+| `pnpm test:e2e` | ✅ 42 testes (novos: ciclo completo pela API, validações, isolamento entre empresas, sessão e origem, ids inválidos) |
+| `pnpm build` | ✅ |
+
+Verificação em produção: após o merge e o deploy. A migração só acrescenta uma coluna com valor padrão, duas tabelas e CHECKs; nenhuma empresa é afetada.
+
+### Observações
+
+- O arquivo do documento (upload, download e antivírus) é a FASE 5 e vai precisar de um serviço externo de armazenamento — peço autorização antes.
+- Situação automática de vencimento, alertas e dashboard são a etapa seguinte da FASE 4.
+- A busca hoje varre os documentos da empresa; o índice de texto entra quando o volume justificar (DEC-031).

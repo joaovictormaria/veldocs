@@ -20,6 +20,7 @@ const APPLICATION_TABLES = [
   "company_modules",
   "departments",
   "document_categories",
+  "document_tags",
   "documents",
   "kit_modules",
   "kit_prices",
@@ -34,6 +35,7 @@ const APPLICATION_TABLES = [
   "roles",
   "sessions",
   "subscriptions",
+  "tags",
   "user_recovery_codes",
   "user_roles",
   "user_totp_credentials",
@@ -50,10 +52,12 @@ const TENANT_SCOPED_TABLES = [
   "company_modules",
   "departments",
   "document_categories",
+  "document_tags",
   "documents",
   "memberships",
   "roles",
   "subscriptions",
+  "tags",
   "user_roles",
 ];
 
