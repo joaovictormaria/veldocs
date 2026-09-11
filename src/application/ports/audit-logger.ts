@@ -1,21 +1,20 @@
 /**
- * Porta de auditoria. A tabela `audit_logs` já existe (append-only);
- * a implementação e o registro dos eventos pertencem às fases 2 e 12.
+ * Porta de auditoria (tabela `audit_logs`, append-only).
  */
 export interface AuditEvent {
-  /** null apenas para eventos sem tenant resolvido (ex.: falha de login). */
+  /** null para eventos sem empresa (ex.: login, cadastro da pessoa). */
   readonly companyId: string | null;
-  /** null para ações do sistema. */
+  /** null para ações do sistema ou tentativas sem pessoa identificada. */
   readonly actorUserId: string | null;
-  /** Ex.: "document.created". */
+  /** Ex.: "auth.login_succeeded". */
   readonly action: string;
   readonly entityType?: string;
   readonly entityId?: string;
-  /** Nunca incluir segredos, tokens ou conteúdo sensível de documentos. */
-  readonly metadata?: Readonly<Record<string, unknown>>;
-  readonly ipAddress?: string;
-  readonly userAgent?: string;
-  readonly requestId?: string;
+  /** Nunca incluir senhas, tokens, CPF, e-mail digitado ou conteúdo de documentos. */
+  readonly metadata?: Readonly<Record<string, string | number | boolean | null>>;
+  readonly ipAddress?: string | null;
+  readonly userAgent?: string | null;
+  readonly requestId?: string | null;
 }
 
 export interface AuditLogger {

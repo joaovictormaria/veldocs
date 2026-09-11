@@ -18,6 +18,15 @@ export const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace"] a
 /** Senha usada apenas no docker-compose local; proibida fora de development. */
 const LOCAL_DEVELOPMENT_PASSWORD = "veldocs_dev_only";
 
+const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
+
+/** Chave binária em base64 (as mensagens nunca incluem o valor). */
+const base64Key = (description: string, accepts: (bytes: number) => boolean) =>
+  z
+    .string()
+    .regex(BASE64_PATTERN, { error: "deve estar em base64" })
+    .refine((value) => accepts(Buffer.from(value, "base64").length), { error: description });
+
 export const envSchema = z
   .object({
     APP_ENV: z.enum(APP_ENVIRONMENTS).default("development"),
@@ -27,6 +36,10 @@ export const envSchema = z
       protocol: /^postgres(ql)?$/,
       error: "deve ser uma URL PostgreSQL válida",
     }),
+    /** AES-256-GCM para dados sensíveis (ex.: CPF). */
+    APP_ENCRYPTION_KEY: base64Key("deve ter exatamente 32 bytes", (bytes) => bytes === 32),
+    /** HMAC-SHA256 para busca de dados sensíveis e chaves de rate limit. */
+    APP_HMAC_KEY: base64Key("deve ter pelo menos 32 bytes", (bytes) => bytes >= 32),
   })
   .superRefine((env, ctx) => {
     if (env.APP_ENV === "development") return;

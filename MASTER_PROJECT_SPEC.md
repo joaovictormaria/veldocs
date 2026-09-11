@@ -1,8 +1,8 @@
 # MASTER PROJECT SPECIFICATION
 ## VELDOCS — SaaS de Gestão Documental Empresarial
 
-**Versão:** 0.4
-**Status:** FASE 0 (Produto) e FASE 1 (Fundação técnica) concluídas — FASE 2 não iniciada
+**Versão:** 0.5
+**Status:** FASE 0 (Produto) e FASE 1 (Fundação técnica) concluídas — FASE 2 parcial (identidade multiempresa, cadastro, login e sessão)
 **Produção:** https://veldocs-app-production.up.railway.app (Railway) — código em `joaovictormaria/veldocs` (GitHub, privado)
 **Documento:** Fonte única de verdade do projeto
 **Última atualização:** 2026-09-10
@@ -101,10 +101,10 @@ Pequenas e médias empresas que precisam controlar documentos próprios, de func
 > Auditado em 2026-09-10, ao fim da FASE 1. "Base de dados" = entidade/tabela criada e testada, sem regra de negócio, API ou tela.
 
 - 🟡 PARCIAL — Empresa (base de dados: `companies`)
-- 🟡 PARCIAL — Usuários (base de dados: `users`; sem cadastro/convite)
-- 🔴 NÃO IMPLEMENTADO — Autenticação (FASE 2)
-- 🟡 PARCIAL — RBAC/permissões (tabelas `roles`, `permissions`, `role_permissions`, `user_roles`; nenhuma verificação de permissão)
-- 🟡 PARCIAL — Multi-tenancy (integridade cross-tenant garantida no banco por FKs compostas; isolamento na aplicação é FASE 2)
+- 🟡 PARCIAL — Usuários (pessoa global com vínculos multiempresa e cadastro público; convites e gestão de membros — FASE 4)
+- 🟡 PARCIAL — Autenticação (cadastro, login por e-mail ou CPF + senha, sessão, logout e logout geral; MFA, link mágico, recuperação de senha e Google pendentes)
+- 🟡 PARCIAL — RBAC/permissões (catálogo de 18 permissões e 5 perfis padrão provisionados em cada empresa nova; verificação de permissão nas rotas pendente)
+- 🟡 PARCIAL — Multi-tenancy (FKs compostas no banco, inclusive vínculo obrigatório para perfis, documentos, auditoria e empresa ativa da sessão; filtro por empresa nas rotas de negócio pendente)
 - 🟡 PARCIAL — Documentos (base de dados: `documents`, somente metadados)
 - 🟡 PARCIAL — Categorias (base de dados: `document_categories`, com subcategorias)
 - 🔴 NÃO IMPLEMENTADO — Upload seguro
@@ -285,7 +285,7 @@ Company
 > `Company` é o tenant; a coluna `company_id` corresponde ao `tenant_id`.
 
 - ✅ CONCLUÍDO — Todo recurso empresarial possui vínculo de tenant.
-  - Evidência: `company_id NOT NULL` em `branches`, `departments`, `users`, `roles`, `user_roles`, `document_categories`, `documents` (`prisma/schema.prisma`).
+  - Evidência: `company_id NOT NULL` em `branches`, `departments`, `memberships`, `roles`, `user_roles`, `document_categories`, `documents` (`prisma/schema.prisma`). Desde a FASE 2, `users` é a pessoa global e o acesso a cada empresa passa por `memberships` (DEC-005).
   - Teste: `tests/integration/database/connection-and-migrations.test.ts` › "toda tabela de dados empresariais possui company_id obrigatório" — passou (2026-09-10).
   - Obs.: `permissions` é catálogo global do sistema; `role_permissions` herda o tenant via `roles`; `audit_logs.company_id` é opcional só para eventos sem tenant resolvido.
 - 🟡 PARCIAL — Vínculos entre entidades pertencem ao mesmo tenant (defesa em profundidade no banco).
@@ -307,27 +307,31 @@ Company
 
 ## Autenticação
 
-- [ ] Cadastro/login
-- [ ] Hash seguro de senha
-- [ ] Recuperação de senha
-- [ ] Tokens de recuperação de uso único
-- [ ] Expiração de tokens
-- [ ] Rate limit
-- [ ] Proteção contra brute force
-- [ ] MFA/2FA
-- [ ] Verificação de e-mail, se adotada
-- [ ] Logout
-- [ ] Logout de todas as sessões
-- [ ] Sessões/dispositivos ativos
+> Decisões do usuário (2026-09-11): login por **CPF ou e-mail + senha**, **link mágico** e **Google**; CPF opcional; **MFA por app autenticador obrigatório para OWNER/ADMIN**; serviço de e-mail a definir. Detalhes técnicos em `docs/architecture/fundacao-tecnica.md`.
+
+- ✅ CONCLUÍDO — Cadastro/login
+  - Evidência: `POST /api/auth/signup` (cria pessoa, empresa, 5 perfis padrão e vínculo OWNER, inicia sessão) e `POST /api/auth/login` (e-mail ou CPF com/sem máscara); casos de uso em `src/application/auth/`.
+  - Testes: `tests/unit/application/auth/login-and-register.test.ts`, `tests/integration/auth/auth-services.test.ts`, `tests/e2e/auth.spec.ts` — passaram (local, 2026-09-11).
+- ✅ CONCLUÍDO — Hash seguro de senha: Argon2id (19 MiB, t=2, p=1), mínimo 12 e máximo 128 caracteres, sem regras de composição. Teste: prefixo `$argon2id$v=19$m=19456,t=2,p=1$` verificado em `tests/unit/infrastructure/security/crypto-and-password.test.ts` — passou.
+- 🔴 NÃO IMPLEMENTADO — Recuperação de senha (depende do serviço de e-mail).
+- 🔴 NÃO IMPLEMENTADO — Tokens de recuperação de uso único.
+- 🔴 NÃO IMPLEMENTADO — Expiração de tokens de recuperação/link mágico.
+- ✅ CONCLUÍDO — Rate limit: login 30/15 min por IP e 10/15 min por conta (HMAC do identificador); cadastro 10/h por IP; PostgreSQL com UPSERT atômico. Testes: bloqueio após 10 tentativas e contagem concorrente sem perdas (integração) — passaram.
+- 🟡 PARCIAL — Proteção contra brute force: limite por conta e por IP, resposta idêntica para qualquer falha e tempo de verificação equalizado para conta inexistente (unit + integração — passaram). Pendente: alerta/monitoramento de ataques e bloqueio progressivo.
+- 🔴 NÃO IMPLEMENTADO — MFA/2FA (decidido: TOTP + códigos de recuperação, obrigatório para OWNER/ADMIN; `sessions.mfa_verified_at` já existe).
+- 🔴 NÃO IMPLEMENTADO — Verificação de e-mail (coluna `users.email_verified_at` já existe; depende do serviço de e-mail).
+- ✅ CONCLUÍDO — Logout: `POST /api/auth/logout` revoga a sessão e apaga o cookie (integração + E2E — passaram).
+- ✅ CONCLUÍDO — Logout de todas as sessões: `POST /api/auth/logout-all` (integração — passou).
+- 🔴 NÃO IMPLEMENTADO — Sessões/dispositivos ativos (IP e user-agent já são gravados em `sessions`; listagem pendente).
 
 ## Sessão
 
-- [ ] Cookies HttpOnly quando aplicável
-- [ ] Secure
-- [ ] SameSite adequado
-- [ ] Expiração
-- [ ] Rotação/revogação quando aplicável
-- [ ] Proteção contra session fixation
+- ✅ CONCLUÍDO — Cookies HttpOnly: verificado no `Set-Cookie` (E2E `cadastro inicia sessão com cookie HttpOnly e SameSite=Lax` — passou).
+- ✅ CONCLUÍDO — Secure: em HTTPS o cookie usa `Secure` e prefixo `__Host-veldocs_session` (`sessionCookieSettings`, teste unitário — passou). Confirmar em produção após o deploy.
+- ✅ CONCLUÍDO — SameSite adequado: `Lax` + verificação de `Origin` nas rotas que alteram estado (unit + E2E — passaram).
+- ✅ CONCLUÍDO — Expiração: 7 dias sem uso (renovada com o uso) e no máximo 30 dias desde o login; CHECK `sessions_expiry_order_chk` (unit `session-manager.test.ts` — passou).
+- ✅ CONCLUÍDO — Rotação/revogação: nova sessão a cada login; revogação individual e geral (unit + integração — passaram).
+- ✅ CONCLUÍDO — Proteção contra session fixation: o token é sempre gerado pelo servidor no login (256 bits) e só o SHA-256 é gravado (`sessions_id_format_chk`); token malformado é descartado sem consulta ao banco (unit + integração — passaram).
 
 ## RBAC
 
@@ -390,7 +394,9 @@ A autorização deve ser decidida pelo backend. O frontend nunca é autoridade d
 
 ### Preparação realizada na FASE 1 (2026-09-10)
 
-- 🟡 PARCIAL — Validação de entrada: variáveis de ambiente validadas com Zod (`src/infrastructure/config/env.ts`, 15 testes unitários — passou). Validação de requests começa na FASE 2.
+- 🟡 PARCIAL — Validação de entrada: variáveis de ambiente e rotas de autenticação validadas com Zod (CPF com dígitos verificadores, e-mail normalizado, política de senha); corpo JSON limitado a 16 KB com `Content-Type` obrigatório (unit + E2E — passaram). Aplicar a cada nova rota.
+- 🟡 PARCIAL — Proteção contra CSRF: rotas de autenticação exigem `Origin` igual a `APP_URL` (ou `Sec-Fetch-Site: same-origin`) + cookie `SameSite=Lax` (unit + E2E — passaram). Aplicar a cada nova rota que altere estado.
+- ✅ CONCLUÍDO — Dados pessoais sensíveis: CPF armazenado só como HMAC-SHA256 + AES-256-GCM com contexto autenticado; chaves `APP_ENCRYPTION_KEY`/`APP_HMAC_KEY` validadas no ambiente e configuradas no Railway sem exibição (integração: nenhuma coluna contém o CPF em claro — passou). Pendente: procedimento de rotação de chaves.
 - 🟡 PARCIAL — Proteção contra SQL injection: acesso a dados via Prisma (consultas parametrizadas); SQL bruto da aplicação só via tagged template (`$queryRaw`).
 - 🟡 PARCIAL — Headers: `X-Powered-By` removido (`poweredByHeader: false`; E2E "não expõe o header X-Powered-By" — passou). HSTS, CSP e demais headers: FASE 2.
 - 🟡 PARCIAL — Timeouts: health check com timeout por componente e sem vazamento de mensagens internas (testes unitários — passou). Timeouts de request: FASE 2.
@@ -399,7 +405,7 @@ A autorização deve ser decidida pelo backend. O frontend nunca é autoridade d
 - ✅ CONCLUÍDO — Banco local exposto apenas em loopback (`127.0.0.1:5440`, `docker-compose.yml`).
 - ✅ CONCLUÍDO — Banco de produção sem acesso público: o PostgreSQL do Railway não tem TCP proxy nem `DATABASE_PUBLIC_URL`; a aplicação conecta pela rede privada (`postgres.railway.internal`). Evidência: lista de variáveis dos serviços (somente nomes) e log do pre-deploy.
 - ✅ CONCLUÍDO — HTTPS em produção: domínio Railway com TLS; `http://` responde 301 para `https://` (verificado com curl em 2026-09-10). HSTS explícito: FASE 2.
-- 🟡 PARCIAL — Rate limiting, auditoria, storage privado, IA e WhatsApp: somente contratos em `src/application/ports/` (`RateLimiter`, `AuditLogger`, `StorageProvider`, `AiProvider`, `WhatsAppProvider`, `NotificationChannel`); nenhuma implementação.
+- 🟡 PARCIAL — Rate limiting e auditoria: implementados para cadastro, login e logout (`PrismaRateLimiter`, `PrismaAuditLogger`). Storage privado, IA, WhatsApp e notificações: somente contratos em `src/application/ports/`.
 
 ## Segurança de API
 
@@ -500,7 +506,7 @@ Usuário autenticado
 
 > **Evidência comum (FASE 1, 2026-09-10):** `prisma/schema.prisma`; migração `prisma/migrations/20260910225812_init_base_entities/migration.sql`; `docs/database/modelo-base.md`. **Testes:** `pnpm test:integration` — 3 arquivos, 36 testes, passou. **Obs.:** ✅ refere-se à entidade base (tabela, constraints e migração); regras de negócio, APIs e telas pertencem às fases seguintes.
 
-- ✅ CONCLUÍDO — User (`users`: vinculado ao tenant; e-mail único global e em minúsculas; status INVITED/ACTIVE/DISABLED; sem credenciais — FASE 2)
+- ✅ CONCLUÍDO — User (`users`: pessoa global desde a FASE 2 — e-mail único em minúsculas, CPF opcional só como HMAC + cifrado, senha Argon2id, status ACTIVE/DISABLED) e Membership (`memberships`: vínculo pessoa ↔ empresa, status INVITED/ACTIVE/SUSPENDED) — migração `identity_memberships_sessions`
 - ✅ CONCLUÍDO — Company (`companies`: tenant raiz; `slug` único; status ACTIVE/SUSPENDED)
 - ✅ CONCLUÍDO — Branch (`branches`: `code` único por empresa)
 - ✅ CONCLUÍDO — Department (`departments`: filial opcional, do mesmo tenant)
@@ -952,8 +958,8 @@ SE documento for recebido
 
 Registrar eventos importantes:
 
-- [ ] Login
-- [ ] Falha de login
+- ✅ CONCLUÍDO — Login (`auth.login_succeeded`; também `auth.account_registered`, `company.created`, `auth.logout`, `auth.logout_all`) — integração — passou
+- ✅ CONCLUÍDO — Falha de login (`auth.login_failed` e `auth.login_rate_limited`, sem e-mail, CPF ou senha nos metadados) — integração — passou
 - [ ] Upload
 - [ ] Download
 - [ ] Criação
@@ -1101,15 +1107,15 @@ Objetivo:
 
 - ✅ CONCLUÍDO — Banco: conexão, migrações, tabelas, `company_id`, FKs cross-tenant, unicidade, CHECKs, trigger append-only e health probes de banco e de migrações (`tests/integration/database/`, 39 testes — passou localmente e no CI).
 - [ ] Storage
-- [ ] Auth
+- ✅ CONCLUÍDO — Auth: `tests/integration/auth/auth-services.test.ts` (13 testes: cadastro atômico, CPF protegido, duplicidade genérica, login por e-mail/CPF, falhas idênticas, bloqueio por tentativas, sessão, logout geral, rate limiter concorrente) — passou.
 - [ ] API
 - [ ] Workers
 
 ## E2E
 
 - 🟡 PARCIAL — Fundação: página inicial, `/api/health` (aplicação + banco + migrações) e ausência de `X-Powered-By` (`tests/e2e/foundation.spec.ts`, 3 testes — passou com `pnpm dev`, com `pnpm start` e no CI).
-- [ ] Cadastro
-- [ ] Login
+- ✅ CONCLUÍDO — Cadastro (`tests/e2e/auth.spec.ts` — passou)
+- ✅ CONCLUÍDO — Login (por CPF, logout e credenciais inválidas genéricas — `tests/e2e/auth.spec.ts` — passou)
 - [ ] Documento
 - [ ] Upload
 - [ ] Download
@@ -1124,10 +1130,10 @@ Objetivo:
 - [ ] Upload malicioso
 - [ ] MIME falsificado
 - [ ] Path traversal
-- [ ] Brute force
-- [ ] Rate limit
-- [ ] Session attacks
-- [ ] CSRF quando aplicável
+- ✅ CONCLUÍDO — Brute force (bloqueio da conta após 10 tentativas, mesmo com a senha correta — integração — passou)
+- ✅ CONCLUÍDO — Rate limit (login e cadastro; contagem concorrente — unit + integração — passaram)
+- 🟡 PARCIAL — Session attacks (token só em hash, fixation, expiração, revogação e token malformado — unit + integração; falta teste de reuso de cookie após logout em navegador real e de roubo de sessão entre dispositivos)
+- 🟡 PARCIAL — CSRF quando aplicável (Origin estrangeira e ausente recusadas nas rotas de autenticação — unit + E2E — passaram; demais rotas conforme forem criadas)
 - [ ] XSS
 - [ ] SSRF
 
@@ -1392,14 +1398,16 @@ Notificações
 
 ## FASE 2 — Segurança base
 
-- [ ] Auth
-- [ ] Sessão
-- [ ] RBAC
-- [ ] Multi-tenancy
-- [ ] Validação
-- [ ] Rate limiting
-- [ ] Logs
-- [ ] Headers
+**Status da fase:** 🟡 PARCIAL — parte 1 (identidade multiempresa, cadastro, login e sessão) implementada em 2026-09-11. Ver seção 5 e o registro de auditoria.
+
+- 🟡 PARCIAL — Auth (cadastro e login por e-mail/CPF + senha ✅; MFA, link mágico, recuperação de senha e Google pendentes)
+- ✅ CONCLUÍDO — Sessão (ver seção 5 — Sessão)
+- 🟡 PARCIAL — RBAC (catálogo e perfis padrão provisionados por empresa; verificação de permissão nas rotas pendente)
+- 🟡 PARCIAL — Multi-tenancy (vínculos multiempresa e FKs compostas; empresa ativa na sessão; seleção de empresa e filtro nas rotas de negócio pendentes)
+- 🟡 PARCIAL — Validação (Zod e limite de corpo nas rotas de autenticação)
+- 🟡 PARCIAL — Rate limiting (cadastro e login)
+- 🔴 NÃO IMPLEMENTADO — Logs (logs estruturados)
+- 🟡 PARCIAL — Headers (`X-Powered-By` removido; CSP com nonce e HSTS pendentes)
 
 ## FASE 3 — Frontend base
 
@@ -1589,13 +1597,15 @@ Registrar aqui decisões importantes.
 
 **Evidência:** contrato `src/application/ports/whatsapp-provider.ts` (envio e validação de assinatura de webhook). Dashboard: FASES 3 e 11; WhatsApp: FASE 30+.
 
-## DEC-005 — Usuário pertence a uma única empresa; e-mail único global
+## DEC-005 — Pessoa global com vínculos multiempresa
 
-**Status:** ⏳ BLOQUEADO (adotada provisoriamente; decisão de produto pendente antes da FASE 4)
+**Status:** ✅ CONCLUÍDO (decidido pelo usuário em 2026-09-11; implementado na FASE 2)
 
-**Motivo:** simplifica login e isolamento na fundação. Migrar para um vínculo usuário↔empresa (membership) a partir de e-mail global é mais simples do que unificar usuários duplicados por empresa.
+**Decisão:** uma mesma pessoa (mesmo e-mail/CPF) pode acessar várias empresas. `users` é a identidade global; `memberships` guarda status e perfis por empresa. Com mais de um vínculo ativo, a sessão começa sem empresa ativa e a pessoa escolhe a empresa.
 
-**Pendência:** confirmar se haverá usuários multiempresa (ex.: contadores, consultores). Se sim, criar entidade de vínculo antes da FASE 4.
+**Motivo:** o login por CPF tornaria impossível, para sempre, uma pessoa estar em duas empresas (ex.: contadores e consultores).
+
+**Evidência:** migração `identity_memberships_sessions` com preservação de dados verificada em banco descartável; testes de integração "aceita como responsável em B a pessoa de A que também é membro de B" e "não define empresa ativa quando a pessoa tem vínculo ativo com mais de uma empresa" — passaram.
 
 ## DEC-006 — Stack e versões da fundação
 
@@ -1653,11 +1663,11 @@ Registrar aqui decisões importantes.
 Produto:        ✅ CONCLUÍDO         (FASE 0 — definição; identidade visual na FASE 3)
 Arquitetura:    ✅ CONCLUÍDO         (fundação: monólito modular em camadas)
 Frontend:       🟡 PARCIAL           (Next.js configurado; página de fundação; layout/design system na FASE 3)
-Backend:        🟡 PARCIAL           (route handler de health check; sem módulos de negócio)
+Backend:        🟡 PARCIAL           (autenticação: cadastro, login, sessão e logout; health check; sem módulos de negócio)
 Banco:          🟡 PARCIAL           (entidades base da FASE 1 ✅; demais entidades nas próximas fases)
 Storage:        🔴 NÃO IMPLEMENTADO  (apenas interface)
-Segurança:      🟡 PARCIAL           (preparação da fundação; controles da FASE 2 não iniciados)
-Testes:         🟡 PARCIAL           (unit 40, integração 36, E2E 3 — cobertura da fundação)
+Segurança:      🟡 PARCIAL           (FASE 2 parte 1: Argon2id, sessão segura, CPF cifrado, rate limit e CSRF nas rotas de auth; MFA, RBAC nas rotas, CSP/HSTS e logs pendentes)
+Testes:         🟡 PARCIAL           (unit 156, integração 62, E2E 8 — fundação e autenticação)
 WhatsApp:       🔴 NÃO IMPLEMENTADO  (apenas interface)
 IA:             🔴 NÃO IMPLEMENTADO  (apenas interface)
 Billing:        🔴 NÃO IMPLEMENTADO
@@ -1668,14 +1678,14 @@ Deploy:         🟡 PARCIAL           (production no Railway; publica só com C
 ## Bloqueadores
 
 - Nenhum bloqueador técnico para iniciar a FASE 2.
-- Decisões pendentes (não bloqueiam a FASE 2): DEC-005 (usuário multiempresa — decidir antes da FASE 4), unicidade de CNPJ entre empresas, retenção de `audit_logs` × LGPD, adoção de RLS.
+- Decisões pendentes: serviço de e-mail transacional (bloqueia link mágico, recuperação de senha e verificação de e-mail), credenciais OAuth do Google (bloqueiam login com Google), identidade visual (logo e cor padrão — aguardando arquivos do usuário), unicidade de CNPJ entre empresas, retenção de `audit_logs` × LGPD, adoção de RLS.
 - Pendências de infraestrutura (não bloqueiam a FASE 2): backups do PostgreSQL de produção (⏳ exige plano Pro no Railway ou dump externo), branch protection (⏳ exige GitHub Pro ou repositório público), ambiente de staging, configuração do Railway versionada como Infrastructure as Code.
 
 ## Última auditoria
 
 **Data:** 2026-09-10
-**Responsável:** Claude Code (auditoria FASE 0 + FASE 1 + deploy inicial + CI)
-**Versão:** 0.4
+**Responsável:** Claude Code (auditoria FASE 0 + FASE 1 + deploy inicial + CI + FASE 2 parte 1)
+**Versão:** 0.5
 
 ---
 
@@ -1818,3 +1828,45 @@ Autorizado pelo usuário nesta data (passo "blindar o deploy" antes da FASE 2).
 | Pre-deploy | ✅ "No pending migrations to apply." |
 | `GET /api/health` | ✅ HTTP 200 `{"status":"ok","checks":{"database":"up","migrations":"up"}}`, `Cache-Control: no-store` |
 | `GET /` | ✅ HTTP 200 |
+
+## 2026-09-11 — FASE 2 (parte 1): identidade multiempresa, cadastro, login e sessão
+
+### Decisões do usuário
+
+| Tema | Decisão |
+|---|---|
+| Multiempresa | Sim — uma pessoa pode acessar várias empresas (DEC-005) |
+| Login | CPF ou e-mail + senha, link mágico e Google |
+| CPF | Opcional |
+| MFA | App autenticador (TOTP + códigos de recuperação), obrigatório para OWNER/ADMIN |
+| E-mail transacional | Decidir depois |
+
+### O que foi feito
+
+| Item | Evidência |
+|---|---|
+| Modelo de identidade | `users` global, `memberships`, `sessions`, `rate_limit_buckets`; FKs de perfis, documentos, auditoria e sessão para o vínculo `(company_id, user_id)` |
+| Migração | `20260911003408_identity_memberships_sessions`, gerada por `prisma migrate diff` (o `migrate dev` recusa ambiente não interativo) e **reescrita para preservar dados** |
+| Domínio | `src/domain/identity/` (CPF, e-mail, senha, identificador de login), `src/domain/access-control/system-roles.ts` (18 permissões, 5 perfis), `src/domain/company/slug.ts` |
+| Aplicação | `src/application/auth/` (cadastro, login, gestor de sessão, sessão atual, logout) + portas de identidade, sessão, hash de senha, tokens e proteção de dados |
+| Infraestrutura | Argon2id, HMAC/AES-256-GCM, repositórios Prisma, rate limiter PostgreSQL, auditoria, helpers HTTP (IP, origem, JSON limitado, cookie) |
+| Rotas | `POST /api/auth/signup`, `POST /api/auth/login`, `POST /api/auth/logout`, `POST /api/auth/logout-all`, `GET /api/auth/session` |
+| Ambiente | `APP_ENCRYPTION_KEY` e `APP_HMAC_KEY` validadas no Zod, adicionadas ao `.env.example`, ao CI (valores de teste) e ao Railway (valores aleatórios de 32 bytes, nunca exibidos) |
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm check` (lint + typecheck + unit) | ✅ 11 arquivos, 156 testes |
+| `pnpm test:integration` | ✅ 4 arquivos, 62 testes (schema recriado e migrações aplicadas do zero) |
+| `pnpm test:e2e` | ✅ 8 testes (fundação + autenticação) |
+| Migração com dados antigos (banco descartável) | ✅ pessoa INVITED → ACTIVE com vínculo INVITED; DISABLED → vínculo SUSPENDED; perfil, documento e auditoria preservados; `users.company_id` removido |
+
+Verificação em produção: após o merge e o deploy desta mudança.
+
+### Problemas encontrados e tratados
+
+- ⚠️ A migração gerada automaticamente só funcionava com tabelas vazias (convertia o status antes de criar os vínculos e descartava `users.company_id`). Falhou no banco de testes com dados de execuções anteriores. Reescrita com migração de dados e verificada em banco descartável.
+- A preparação dos testes de integração passou a recriar o schema do banco `*_test` a cada execução, para que uma migração com falha registrada não bloqueie as próximas.
+- ⚠️ Guardar cópia de `APP_ENCRYPTION_KEY` e `APP_HMAC_KEY` fora do Railway (cofre de senhas): sem elas os CPFs cifrados não podem ser lidos e o login por CPF deixa de funcionar.
+- Logo e cor padrão do sistema: o usuário pediu para salvar, mas os arquivos não chegaram; aguardando o arquivo da logo e o código da cor.

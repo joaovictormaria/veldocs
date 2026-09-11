@@ -1,18 +1,23 @@
 // =============================================================================
-// VELDOCS — Modelo de dados base (FASE 1)
+// VELDOCS — Modelo de dados
 // -----------------------------------------------------------------------------
 // Multi-tenancy: `Company` é o tenant. Toda entidade empresarial possui
 // `company_id` (equivalente ao tenant_id do MASTER SPEC).
 //
-// Integridade cross-tenant no próprio banco: relações entre entidades de um
-// mesmo tenant usam FKs compostas `(company_id, <fk>) -> (company_id, id)`.
-// Assim o PostgreSQL rejeita, por exemplo, um documento da empresa A apontando
-// para uma categoria, filial, setor ou usuário da empresa B.
+// Identidade (FASE 2, DEC-005): `User` é a pessoa, global. O acesso a cada
+// empresa acontece por `Membership` (uma pessoa pode estar em várias empresas).
+// Perfis, responsáveis por documentos e autores de auditoria referenciam o
+// vínculo `(company_id, user_id)`, garantindo que a pessoa é membro daquela
+// empresa.
 //
-// Regras adicionais aplicadas via SQL na migração inicial:
+// Integridade cross-tenant no próprio banco: relações entre entidades de um
+// mesmo tenant usam FKs compostas `(company_id, <fk>)`.
+//
+// Regras adicionais aplicadas via SQL nas migrações:
 //   - audit_logs é append-only (UPDATE/DELETE bloqueados por trigger);
-//   - users.email deve estar normalizado em minúsculas;
-//   - permissions.key deve seguir o formato `recurso.acao`.
+//   - users.email em minúsculas; CPF só como hash HMAC + valor cifrado;
+//   - permissions.key no formato `recurso.acao`;
+//   - sessions.id é SHA-256 hexadecimal do token (o token nunca é gravado).
 // =============================================================================
 
 generator client {
@@ -30,9 +35,14 @@ enum CompanyStatus {
 }
 
 enum UserStatus {
-  INVITED
   ACTIVE
   DISABLED
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
 }
 
 /// Tenant raiz. Nenhum dado empresarial existe fora de uma Company.
@@ -50,7 +60,7 @@ model Company {
 
   branches           Branch[]
   departments        Department[]
-  users              User[]
+  memberships        Membership[]
   roles              Role[]
   userRoles          UserRole[]
   documentCategories DocumentCategory[]
@@ -97,33 +107,58 @@ model Department {
   @@map("departments")
 }
 
-/// Usuário pertence a exatamente uma Company nesta fase.
-/// Credenciais/sessões/MFA serão modelados na FASE 2 (autenticação).
+/// Pessoa (identidade global). Não pertence a uma empresa: ver Membership.
 model User {
-  id          String     @id @default(uuid(7)) @db.Uuid
-  companyId   String     @map("company_id") @db.Uuid
-  /// Normalizado em minúsculas (CHECK no banco). Único globalmente — ver DEC-005.
-  email       String     @unique @db.VarChar(320)
-  name        String     @db.VarChar(200)
-  status      UserStatus @default(INVITED)
-  lastLoginAt DateTime?  @map("last_login_at") @db.Timestamptz(3)
-  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt   DateTime?  @map("deleted_at") @db.Timestamptz(3)
+  id              String     @id @default(uuid(7)) @db.Uuid
+  /// Normalizado em minúsculas (CHECK no banco). Único globalmente.
+  email           String     @unique @db.VarChar(320)
+  emailVerifiedAt DateTime?  @map("email_verified_at") @db.Timestamptz(3)
+  name            String     @db.VarChar(200)
+  /// HMAC-SHA256 (hex) do CPF normalizado: busca e unicidade sem expor o CPF. CPF é opcional.
+  cpfLookupHash   String?    @unique @map("cpf_lookup_hash") @db.VarChar(64)
+  /// CPF cifrado (AES-256-GCM, formato versionado). Nunca em texto puro.
+  cpfEncrypted    String?    @map("cpf_encrypted") @db.VarChar(255)
+  /// Hash Argon2id. Nulo para quem entra apenas por link mágico ou Google.
+  passwordHash    String?    @map("password_hash") @db.VarChar(255)
+  status          UserStatus @default(ACTIVE)
+  lastLoginAt     DateTime?  @map("last_login_at") @db.Timestamptz(3)
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime?  @map("deleted_at") @db.Timestamptz(3)
 
-  company              Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  roles                UserRole[]
-  responsibleDocuments Document[] @relation("DocumentResponsibleUser")
-  createdDocuments     Document[] @relation("DocumentCreatedBy")
-  auditLogs            AuditLog[]
+  memberships Membership[]
+  sessions    Session[]
+  auditLogs   AuditLog[]
 
-  @@unique([companyId, id])
   @@map("users")
 }
 
+/// Vínculo de uma pessoa com uma empresa. Status e perfis são por empresa.
+model Membership {
+  id        String           @id @default(uuid(7)) @db.Uuid
+  companyId String           @map("company_id") @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  status    MembershipStatus @default(INVITED)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company              Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  user                 User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  roles                UserRole[]
+  responsibleDocuments Document[] @relation("DocumentResponsibleMember")
+  createdDocuments     Document[] @relation("DocumentCreatedByMember")
+  actorAuditLogs       AuditLog[] @relation("AuditLogActorMembership")
+  activeSessions       Session[]
+
+  @@unique([companyId, userId])
+  @@unique([companyId, id])
+  @@index([userId])
+  @@map("memberships")
+}
+
 /// Perfil de acesso (RBAC) sempre escopado ao tenant.
-/// Perfis padrão (OWNER, ADMIN, GESTOR, COLABORADOR, VISUALIZADOR) serão
-/// provisionados por empresa nas fases 2/4 com `isSystem = true`.
+/// Perfis padrão (OWNER, ADMIN, GESTOR, COLABORADOR, VISUALIZADOR) são
+/// provisionados na criação da empresa com `isSystem = true`.
 model Role {
   id          String   @id @default(uuid(7)) @db.Uuid
   companyId   String   @map("company_id") @db.Uuid
@@ -169,7 +204,7 @@ model RolePermission {
   @@map("role_permissions")
 }
 
-/// Atribuição de perfil a usuário. As FKs compostas garantem que usuário e
+/// Perfil atribuído a um membro. As FKs compostas garantem que o vínculo e o
 /// perfil pertençam à MESMA empresa.
 model UserRole {
   companyId String   @map("company_id") @db.Uuid
@@ -177,11 +212,11 @@ model UserRole {
   roleId    String   @map("role_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  user    User    @relation(fields: [companyId, userId], references: [companyId, id], onDelete: Cascade)
-  role    Role    @relation(fields: [companyId, roleId], references: [companyId, id], onDelete: Cascade)
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  membership Membership @relation(fields: [companyId, userId], references: [companyId, userId], onDelete: Cascade)
+  role       Role       @relation(fields: [companyId, roleId], references: [companyId, id], onDelete: Cascade)
 
-  @@id([userId, roleId])
+  @@id([companyId, userId, roleId])
   @@index([companyId, roleId])
   @@map("user_roles")
 }
@@ -215,7 +250,9 @@ model Document {
   categoryId        String?   @map("category_id") @db.Uuid
   branchId          String?   @map("branch_id") @db.Uuid
   departmentId      String?   @map("department_id") @db.Uuid
+  /// Pessoa responsável; precisa ser membro da mesma empresa.
   responsibleUserId String?   @map("responsible_user_id") @db.Uuid
+  /// Pessoa que criou; precisa ser membro da mesma empresa.
   createdById       String?   @map("created_by_id") @db.Uuid
   title             String    @db.VarChar(255)
   description       String?
@@ -225,12 +262,12 @@ model Document {
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
 
-  company         Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  category        DocumentCategory? @relation(fields: [companyId, categoryId], references: [companyId, id], onDelete: Restrict)
-  branch          Branch?           @relation(fields: [companyId, branchId], references: [companyId, id], onDelete: Restrict)
-  department      Department?       @relation(fields: [companyId, departmentId], references: [companyId, id], onDelete: Restrict)
-  responsibleUser User?             @relation("DocumentResponsibleUser", fields: [companyId, responsibleUserId], references: [companyId, id], onDelete: Restrict)
-  createdBy       User?             @relation("DocumentCreatedBy", fields: [companyId, createdById], references: [companyId, id], onDelete: Restrict)
+  company           Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  category          DocumentCategory? @relation(fields: [companyId, categoryId], references: [companyId, id], onDelete: Restrict)
+  branch            Branch?           @relation(fields: [companyId, branchId], references: [companyId, id], onDelete: Restrict)
+  department        Department?       @relation(fields: [companyId, departmentId], references: [companyId, id], onDelete: Restrict)
+  responsibleMember Membership?       @relation("DocumentResponsibleMember", fields: [companyId, responsibleUserId], references: [companyId, userId], onDelete: Restrict)
+  createdByMember   Membership?       @relation("DocumentCreatedByMember", fields: [companyId, createdById], references: [companyId, userId], onDelete: Restrict)
 
   @@unique([companyId, id])
   @@index([companyId, expirationDate])
@@ -243,27 +280,69 @@ model Document {
 }
 
 /// Trilha de auditoria append-only. `companyId` é opcional para eventos sem
-/// tenant resolvido (ex.: falha de login com e-mail inexistente — FASE 2).
+/// tenant (ex.: login). Quando há empresa, o autor precisa ser membro dela.
 model AuditLog {
   id          String   @id @default(uuid(7)) @db.Uuid
   companyId   String?  @map("company_id") @db.Uuid
   actorUserId String?  @map("actor_user_id") @db.Uuid
-  /// Ex.: document.created, user.role_assigned
+  /// Ex.: auth.login_succeeded, document.created
   action      String   @db.VarChar(100)
   entityType  String?  @map("entity_type") @db.VarChar(100)
   entityId    String?  @map("entity_id") @db.VarChar(100)
-  /// Não armazenar segredos ou conteúdo sensível de documentos aqui.
+  /// Não armazenar segredos, senhas, tokens, CPF ou conteúdo de documentos aqui.
   metadata    Json?    @db.JsonB
   ipAddress   String?  @map("ip_address") @db.VarChar(45)
   userAgent   String?  @map("user_agent") @db.VarChar(512)
   requestId   String?  @map("request_id") @db.VarChar(100)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  actorUser User?    @relation(fields: [companyId, actorUserId], references: [companyId, id], onDelete: Restrict)
+  company         Company?    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  actorUser       User?       @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  actorMembership Membership? @relation("AuditLogActorMembership", fields: [companyId, actorUserId], references: [companyId, userId], onDelete: Restrict)
 
   @@index([companyId, createdAt])
   @@index([companyId, entityType, entityId])
   @@index([companyId, actorUserId])
+  @@index([actorUserId, createdAt])
   @@map("audit_logs")
+}
+
+/// Sessão autenticada. O cookie guarda um token aleatório; aqui fica apenas o
+/// SHA-256 do token, então um vazamento do banco não permite sequestrar sessões.
+model Session {
+  /// SHA-256 (hex) do token de sessão.
+  id                String    @id @db.VarChar(64)
+  userId            String    @map("user_id") @db.Uuid
+  /// Empresa selecionada nesta sessão; precisa ser um vínculo da pessoa.
+  activeCompanyId   String?   @map("active_company_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt        DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  /// Expiração por inatividade (renovada com o uso, limitada à absoluta).
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(3)
+  /// Expiração absoluta: a sessão nunca passa deste momento.
+  absoluteExpiresAt DateTime  @map("absolute_expires_at") @db.Timestamptz(3)
+  /// Momento em que o segundo fator foi confirmado nesta sessão (MFA).
+  mfaVerifiedAt     DateTime? @map("mfa_verified_at") @db.Timestamptz(3)
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(3)
+  ipAddress         String?   @map("ip_address") @db.VarChar(45)
+  userAgent         String?   @map("user_agent") @db.VarChar(512)
+
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeMembership Membership? @relation(fields: [activeCompanyId, userId], references: [companyId, userId], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([activeCompanyId, userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// Janela fixa de rate limiting (substituível por Redis no futuro).
+/// A chave nunca contém dado pessoal em claro (e-mail/CPF entram como HMAC).
+model RateLimitBucket {
+  key     String   @id @db.VarChar(200)
+  count   Int
+  resetAt DateTime @map("reset_at") @db.Timestamptz(3)
+
+  @@index([resetAt])
+  @@map("rate_limit_buckets")
 }
