@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api, errorMessage } from "@/presentation/api-client";
-import { Alert, BrandLogo, Button } from "@/presentation/components/ui";
+import { Alert, Button, CARD } from "@/presentation/components/ui";
 import { formatBRL, formatDate, pluralizeDays } from "@/presentation/format";
-import { LogoutButton } from "./logout-button";
 
 interface CatalogModule {
   readonly key: string;
@@ -63,18 +62,8 @@ const STATUS_LABELS: Readonly<Record<string, string>> = {
   SUSPENDED: "Assinatura suspensa",
 };
 
-const CARD = "rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900";
-
 /** Builder (MASTER SPEC 2.4 e 2.8): preços e total vêm sempre do servidor. `data` nulo: perfil sem permissão. */
-export function BuilderClient({
-  userName,
-  companyName,
-  data,
-}: {
-  readonly userName: string;
-  readonly companyName: string;
-  readonly data: BuilderData | null;
-}) {
+export function BuilderClient({ data }: { readonly data: BuilderData | null }) {
   const [subscription, setSubscription] = useState<Subscription | null>(data?.subscription ?? null);
   const [editing, setEditing] = useState(false);
 
@@ -111,24 +100,7 @@ export function BuilderClient({
     );
   };
 
-  return (
-    <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-          <div className="flex items-center gap-4">
-            <BrandLogo className="w-28" />
-            <span className="hidden text-sm text-slate-500 sm:inline">{companyName}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden text-sm text-slate-600 sm:inline dark:text-slate-400">{userName}</span>
-            <LogoutButton />
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-6xl px-6 py-10">{renderContent()}</main>
-    </div>
-  );
+  return renderContent();
 }
 
 function ModulePicker({

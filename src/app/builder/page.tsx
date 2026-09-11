@@ -4,6 +4,7 @@ import { TRIAL_DAYS } from "@/domain/billing/subscription-status";
 import { getAuthServices } from "@/infrastructure/composition/auth-services";
 import { getEnv } from "@/infrastructure/config/env";
 import { readSessionToken } from "@/infrastructure/http/session-cookie";
+import { AppShell } from "@/presentation/components/app-shell";
 import { BuilderClient, type BuilderData } from "@/presentation/screens/builder-client";
 import { currentSession, nextStepFor } from "../_lib/session";
 
@@ -21,7 +22,11 @@ export default async function BuilderPage() {
   if (nextStepFor(session) !== "/builder") redirect("/seguranca");
 
   const company = session.memberships.find((membership) => membership.companyId === session.session.activeCompanyId);
-  const header = { userName: session.user.name, companyName: company?.companyName ?? "Sua empresa" };
+  const shell = {
+    userName: session.user.name,
+    companyName: company?.companyName ?? "Sua empresa",
+    current: "/builder",
+  } as const;
 
   const services = getAuthServices();
   const authorization = await services.authorize(await readSessionToken(getEnv().APP_URL), "billing.read");
@@ -31,7 +36,11 @@ export default async function BuilderPage() {
       redirect("/seguranca");
     }
     // Perfil sem permissão de assinatura ou sem empresa ativa.
-    return <BuilderClient {...header} data={null} />;
+    return (
+      <AppShell {...shell}>
+        <BuilderClient data={null} />
+      </AppShell>
+    );
   }
 
   const [modules, kits, subscription] = await Promise.all([
@@ -45,5 +54,9 @@ export default async function BuilderPage() {
     JSON.stringify({ catalog: { modules, kits, trialDays: TRIAL_DAYS }, subscription }),
   ) as BuilderData;
 
-  return <BuilderClient {...header} data={data} />;
+  return (
+    <AppShell {...shell}>
+      <BuilderClient data={data} />
+    </AppShell>
+  );
 }

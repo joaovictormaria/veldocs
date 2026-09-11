@@ -4,6 +4,8 @@ Fonte da verdade: `src/app/api/documents/`, `src/app/api/categories/`, `src/app/
 
 Núcleo documental da FASE 4 (MASTER SPEC 10.1). **Só metadados**: o arquivo em si, o upload e o download pertencem à FASE 5 (storage), e as versões à FASE 6.
 
+As telas `/documentos` e `/categorias` usam esta API — ver [`docs/frontend/telas.md`](../frontend/telas.md).
+
 Toda rota exige sessão autenticada. A empresa **nunca** vem da requisição: é a empresa ativa da sessão. Um id de outra empresa se comporta como inexistente.
 
 ## Endpoints
