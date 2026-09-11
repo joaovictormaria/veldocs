@@ -39,7 +39,7 @@ Fonte da verdade: [`prisma/schema.prisma`](../../prisma/schema.prisma) e [`prism
 | `kit_modules` | **global** | módulos incluídos em cada kit; FK para `modules` |
 | `kit_prices` | **global** | preço por kit, com o mesmo histórico e as mesmas regras dos preços de módulo |
 | `company_modules` | tenant | módulo contratado pela empresa (entitlement); PK `(company_id, module_key)`; toda empresa nova nasce com o Core |
-| `subscriptions` | tenant | uma por empresa; estado canônico e datas do trial; `TRIAL_EXPIRING`/`TRIAL_EXPIRED` são derivados do tempo (DEC-022); `canceled_at`/`suspended_at` contam a retenção de 1 ano / 2 meses (DEC-025) |
+| `subscriptions` | tenant | uma por empresa; estado canônico e datas do trial; `TRIAL_EXPIRING`/`TRIAL_EXPIRED` são derivados do tempo (DEC-022); `canceled_at`/`suspended_at` contam a retenção de 1 ano / 2 meses (DEC-025); `kit_key` guarda o kit escolhido no Builder |
 
 ## Isolamento multi-tenant no banco
 
@@ -82,6 +82,7 @@ Isso é **defesa em profundidade** — a autorização server-side por tenant co
 | Preços iniciais dos 17 módulos | `INSERT` em `module_prices` | `module_prices_initial` |
 | Preço de kit não negativo, vigência em ordem e moeda com 3 letras | `kit_prices_amount_non_negative_chk`, `kit_prices_validity_order_chk`, `kit_prices_currency_format_chk` | `kits_and_subscription_retention` |
 | Os 6 kits, sua composição e preços | `INSERT` em `kits`, `kit_modules` e `kit_prices` | `kits_and_subscription_retention` |
+| Permissões `billing.read`/`billing.manage` para OWNER e ADMIN das empresas existentes | `INSERT` em `permissions` e `INSERT … SELECT` em `role_permissions` | `builder_trial_and_billing_permissions` |
 
 ## Migrações
 
@@ -93,6 +94,7 @@ Isso é **defesa em profundidade** — a autorização server-side por tenant co
 | `20260911033935_commercial_catalog_and_subscriptions` | `modules`, `module_dependencies`, `module_prices`, `company_modules` e `subscriptions`; povoa o catálogo e dá o Core a toda empresa já existente |
 | `20260911044509_module_prices_initial` | CHECKs de preço e preços mensais iniciais dos 17 módulos (decisão do usuário em 2026-09-11) |
 | `20260911051529_kits_and_subscription_retention` | `kits`, `kit_modules` e `kit_prices` com os 6 kits; coluna `subscriptions.suspended_at` para a retenção |
+| `20260911054436_builder_trial_and_billing_permissions` | coluna `subscriptions.kit_key` (FK para `kits`) e permissões de assinatura para OWNER e ADMIN já existentes |
 
 A preservação de dados da migração `identity_memberships_sessions` foi verificada em 2026-09-11 num banco descartável: migração 1 → dados no formato antigo (pessoas INVITED/ACTIVE/DISABLED, perfil, documento com responsável e criador, auditoria) → migração 2 → vínculos e status corretos, nenhum registro perdido.
 

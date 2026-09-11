@@ -133,6 +133,16 @@ describe("authorize", () => {
     expect(entitlements.checks).toEqual([`${COMPANY_A}:core`]);
   });
 
+  it("permissões de assinatura seguem valendo com a assinatura inválida, para a empresa poder assinar", async () => {
+    const { authorize, access, entitlements, user, token } = await setup({ entitlement: "subscription_inactive" });
+    access.grant(user.userId, COMPANY_A, { roleKeys: ["GESTOR"], permissions: ["billing.read", "company.read"] });
+
+    await expect(authorize(token, "billing.read")).resolves.toMatchObject({ ok: true });
+    expect(entitlements.checks).toHaveLength(0);
+
+    await expect(authorize(token, "company.read")).resolves.toEqual({ ok: false, reason: "subscription_inactive" });
+  });
+
   it.each(["OWNER", "ADMIN"])("perfil %s sem segundo fator cadastrado é recusado", async (roleKey) => {
     const { authorize, access, entitlements, user, token } = await setup();
     access.grant(user.userId, COMPANY_A, { roleKeys: [roleKey], permissions: ["company.read"] });

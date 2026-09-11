@@ -276,7 +276,7 @@ Documentos + Vencimentos + Alertas
 
 Os kits são uma camada comercial opcional sobre os módulos individuais.
 
-**Kits definidos pelo usuário em 2026-09-11** — 🟡 PARCIAL (catálogo, preços, orçamento e sugestão no backend; contratação pelo Builder pendente):
+**Kits definidos pelo usuário em 2026-09-11** — 🟡 PARCIAL (catálogo, preços, orçamento, sugestão e contratação no início do trial pela API do Builder; tela e troca durante o trial pendentes):
 
 | Kit | Indicado para | Módulos incluídos | Preço | Soma avulsa | Economia |
 |---|---|---|---|---|---|
@@ -377,9 +377,9 @@ O objetivo é **mostrar valor**, e não pressionar o usuário.
 - 🔴 NÃO IMPLEMENTADO — Dashboard
 - 🟡 PARCIAL — Auditoria/histórico (`audit_logs` append-only; eventos de cadastro, login e logout)
 - 🔴 NÃO IMPLEMENTADO — Versionamento
-- 🔴 NÃO IMPLEMENTADO — Builder de módulos
-- 🔴 NÃO IMPLEMENTADO — Trial de 14 dias
-- 🔴 NÃO IMPLEMENTADO — Estados de assinatura/trial
+- 🟡 PARCIAL — Builder de módulos (API pronta: catálogo, preço em tempo real e início do trial — `docs/api/builder.md`; tela pendente)
+- 🟡 PARCIAL — Trial de 14 dias (início pela API do Builder e estados derivados do tempo; cobrança ao fim do trial pendente — FASE 16)
+- 🟡 PARCIAL — Estados de assinatura/trial (estados da seção 2.8, bloqueio sem assinatura válida e retenção — DEC-022 e DEC-025; transições por cobrança pendentes)
 
 ## 3.2 Evolução V2
 
@@ -624,7 +624,7 @@ Nunca permitir acesso cruzado.
 - ✅ CONCLUÍDO — Todo recurso empresarial possui vínculo de tenant.
   - Evidência: `company_id NOT NULL` em `branches`, `departments`, `memberships`, `roles`, `user_roles`, `document_categories`, `documents`; `users` é a pessoa global e acessa empresas por `memberships` (DEC-009).
   - Teste: `tests/integration/database/connection-and-migrations.test.ts` — passou (local e CI, 2026-09-11).
-- 🟡 PARCIAL — Toda leitura valida tenant: as rotas de negócio existentes (`/api/company`, `/api/company/members`, `/api/company/members/[userId]`, `/api/company/branches*`, `/api/company/departments*`) usam só a empresa ativa da sessão, com vínculo e empresa ativos. Cada rota nova deve usar `authorizeRequest`.
+- 🟡 PARCIAL — Toda leitura valida tenant: as rotas de negócio existentes (`/api/company`, `/api/company/members`, `/api/company/members/[userId]`, `/api/company/branches*`, `/api/company/departments*`, `/api/builder/*`, `/api/subscription`) usam só a empresa ativa da sessão, com vínculo e empresa ativos. Cada rota nova deve usar `authorizeRequest`.
   - Testes: `tests/integration/access/access-control.test.ts`, `company-management.test.ts` e `tests/e2e/*.spec.ts` — passaram (local, 2026-09-11).
 - 🟡 PARCIAL — Toda escrita valida tenant: o banco rejeita vínculos entre empresas por FKs compostas, inclusive pessoa que não é membro (DEC-010); nas rotas, a empresa vem sempre do `AuthorizedContext` e o `companyId` entra em toda cláusula `where` (empresa, filiais e setores). Rotas dos demais recursos ainda não existem.
   - Testes: `tests/integration/database/tenant-isolation-constraints.test.ts` (17 testes) e `tests/integration/access/company-management.test.ts` — passaram.
@@ -973,6 +973,8 @@ Entidades existentes além da lista: `Membership` (vínculo pessoa ↔ empresa),
 
 ## 11.2 Builder de módulos
 
+> **Status (2026-09-11):** 🔴 NÃO IMPLEMENTADO na interface. A API que alimenta cada item já existe (`docs/api/builder.md`): catálogo com preços e status (`/api/builder/catalog`), total em tempo real com sugestão de kit (`/api/builder/quote`) e resumo do trial (`/api/subscription`).
+
 - [ ] Catálogo visual
 - [ ] Preço por módulo
 - [ ] Status ativo/inativo
@@ -1148,7 +1150,7 @@ Registrar, quando aplicável:
 > Suíte atual: 17 testes Playwright — passaram (local; CI roda contra `pnpm start`).
 
 - ✅ CONCLUÍDO — Cadastro (`tests/e2e/auth.spec.ts`: cookie HttpOnly/SameSite, sessão, login por CPF, logout, credenciais inválidas, origem e JSON obrigatórios)
-- 🔴 NÃO IMPLEMENTADO — Builder
+- 🟡 PARCIAL — Builder (`tests/e2e/builder.spec.ts`, pela API: catálogo, preço com sugestão de kit, kit + módulo avulso, início do trial, repetição recusada, escolha inválida, sessão e origem; sem tela)
 - 🔴 NÃO IMPLEMENTADO — Ativação de módulo
 - 🔴 NÃO IMPLEMENTADO — Desativação
 - 🔴 NÃO IMPLEMENTADO — Trial
@@ -1325,7 +1327,7 @@ As recomendações devem ser:
 
 ## FASE 3 — Empresa, usuários e módulos comerciais
 
-**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada. Da segunda, já existem o catálogo de módulos, os entitlements por empresa e os estados do trial no backend; faltam o Builder (com a contratação de kits e módulos), a exibição do preço em tempo real, o início do trial e a exclusão de contas após a retenção. Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
+**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada. Da segunda, já existem o catálogo de módulos, os entitlements por empresa e os estados do trial no backend; faltam a tela do Builder (a API existe), a troca de kit e módulos durante o trial e a exclusão de contas após a retenção. Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
 
 - ✅ CONCLUÍDO — Empresas (entidade, criação no cadastro e edição dos dados cadastrais com CNPJ validado)
   - Evidência: `PATCH /api/company` (`company.update`), `src/application/access/manage-company.ts`, `src/domain/company/cnpj.ts`; auditoria `company.updated`.
@@ -1346,17 +1348,22 @@ As recomendações devem ser:
   - Evidência: `company_modules` por empresa; `src/infrastructure/access/database-entitlements.ts` substitui o provisório "só Core"; o Core é provisionado no cadastro; assinatura inválida bloqueia tudo, Core incluído, sem apagar dados; empresa sem assinatura (antes do Builder) usa o Core; módulo pago exige contratação ativa **e** assinatura válida (DEC-022).
   - Testes: `tests/integration/access/entitlements.test.ts` (trial vigente e vencido, módulo não contratado ou desativado, sem assinatura, PAST_DUE/CANCELED/SUSPENDED, isolamento entre empresas, FK do catálogo, Core no cadastro) — passaram (local, 2026-09-11).
   - Observação: nenhuma permissão pertence ainda a módulo pago — as capacidades desses módulos são de fases futuras, e o bloqueio passa a valer automaticamente quando existirem. Ativar e desativar módulos é parte do Builder.
-- 🔴 NÃO IMPLEMENTADO — Builder
+- 🟡 PARCIAL — Builder
+  - Evidência (API): `GET /api/builder/catalog`, `GET /api/builder/quote`, `POST /api/builder/trial` e `GET /api/subscription`, com as permissões `billing.read`/`billing.manage` de OWNER e ADMIN (DEC-026); `src/application/billing/subscription-use-cases.ts`; documentação em `docs/api/builder.md`.
+  - Testes: `tests/unit/application/billing/subscription-use-cases.test.ts`, `tests/integration/billing/subscription.test.ts` e `tests/e2e/builder.spec.ts` — passaram (local, 2026-09-11).
+  - Pendente: a tela e a troca de kit e módulos durante o trial.
 - 🟡 PARCIAL — Preço em tempo real
   - Evidência: preço vigente por data em `src/infrastructure/database/prisma-billing-catalog-repository.ts` e orçamento calculado no backend em `src/domain/billing/pricing.ts` via `createCatalogQueries.quote` — Core sempre incluído, dependências resolvidas, módulo sem preço vigente explícito em vez de valer zero.
   - Testes: `tests/unit/domain/billing/pricing.test.ts` e `tests/integration/billing/module-prices.test.ts` — passaram (local, 2026-09-11).
   - Kits: orçamento de kit + módulos avulsos (`quoteKit`) e sugestão do kit que barateia a mesma seleção (`suggestKit`) — testes unitários e de integração passaram.
-  - Pendente: exibição no Builder.
+  - API: `GET /api/builder/quote` devolve o total avulso com sugestão de kit, ou kit + módulos fora dele — E2E passou.
+  - Pendente: exibição na tela do Builder.
 - 🟡 PARCIAL — Trial state machine
   - Evidência: `src/domain/billing/subscription-status.ts` — 14 dias, estados da seção 2.8 (canônicos no banco e derivados do tempo na leitura — DEC-022), transições permitidas e reativação; tabela `subscriptions`.
   - Testes: `tests/unit/domain/billing/subscription-status.test.ts` — passou.
   - Retenção: 1 ano para assinatura cancelada e 2 meses para suspensa (`dataRetentionUntil`, coluna `suspended_at`) — DEC-025.
-  - Pendente: início do trial pelo Builder, transições acionadas por cobrança (FASE 16) e a exclusão de contas após a retenção.
+  - Início do trial: `POST /api/builder/trial` cria a assinatura `TRIALING` de 14 dias e ativa os módulos numa transação; uma única vez por empresa, garantido pelo banco.
+  - Pendente: transições acionadas por cobrança (FASE 16) e a exclusão de contas após a retenção.
 
 ## FASE 4 — Núcleo documental
 
@@ -1682,7 +1689,7 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 ## DEC-024 — Kits como camada sobre os módulos
 
-**Status:** 🟡 PARCIAL (catálogo, preços, orçamento e sugestão implementados na FASE 3; contratação pelo Builder pendente)
+**Status:** 🟡 PARCIAL (catálogo, preços, orçamento, sugestão e escolha do kit no início do trial implementados na FASE 3; troca de kit durante o trial pendente)
 
 **Decisão (usuário, 2026-09-11):** 6 kits (seção 2.7). Um kit pode ser combinado com módulos avulsos: paga-se o preço do kit e, à parte, só os módulos que ficaram fora dele. O Builder sugere o kit que deixar a mesma seleção mais barata, mesmo que traga módulos a mais; sem economia real, não sugere nada.
 
@@ -1708,19 +1715,33 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 ---
 
+## DEC-026 — Permissões de assinatura fora do bloqueio
+
+**Status:** ✅ CONCLUÍDO (implementado na FASE 3)
+
+**Decisão:** as permissões `billing.read` e `billing.manage` (só OWNER e ADMIN) continuam valendo quando a assinatura está inválida — trial vencido, atraso, cancelada ou suspensa. Todas as demais seguem bloqueadas (DEC-022).
+
+**Motivo:** a seção 2.9 exige que a empresa bloqueada tenha caminho claro para assinar ou reativar. Sem a exceção, a empresa com trial vencido não conseguiria nem ver a própria situação.
+
+**Implementação:** a regra fica no domínio (`SUBSCRIPTION_EXEMPT_PERMISSIONS` em `src/domain/access-control/permission-modules.ts`) e o autorizador pula o entitlement só para essas permissões — as rotas não decidem nada sozinhas. Um teste garante que só permissões `billing.*` escapam do bloqueio.
+
+**Evidência:** `tests/unit/domain/access-control/permission-modules.test.ts`, `tests/unit/application/access/authorize-and-select.test.ts` e `tests/integration/billing/subscription.test.ts` (trial vencido: `company.read` recusado, situação da assinatura acessível) — passaram.
+
+---
+
 # 24. STATUS GERAL
 
 **Produto:** ✅ CONCLUÍDO (definição e identidade visual; vetores da logo pendentes)
 **Arquitetura:** ✅ CONCLUÍDO (monólito modular em camadas; entitlements por empresa na cadeia de autorização)
 **Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit, CSRF, empresa ativa, RBAC, MFA para OWNER/ADMIN, CSP com nonce, HSTS e logs estruturados; verificação de e-mail e recuperação de senha no backlog)
 **Frontend:** 🔴 NÃO IMPLEMENTADO (somente página inicial da fundação)
-**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial e entitlements por empresa; sem módulos de negócio)
+**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial, entitlements por empresa e API do Builder com início do trial; sem módulos de negócio)
 **Banco:** 🟡 PARCIAL (identidade, empresa, acesso, documentos, auditoria, catálogo comercial com preços e kits, módulos por empresa e assinatura com prazos de retenção)
 **Storage:** 🔴 NÃO IMPLEMENTADO
 **Billing:** 🔴 NÃO IMPLEMENTADO
 **WhatsApp:** 🔴 NÃO IMPLEMENTADO
 **IA:** 🔴 NÃO IMPLEMENTADO
-**Testes:** 🟡 PARCIAL (332 unitários, 123 integração, 23 E2E; CI bloqueando o deploy)
+**Testes:** 🟡 PARCIAL (346 unitários, 127 integração, 26 E2E; CI bloqueando o deploy)
 
 ## Bloqueadores
 
@@ -2139,3 +2160,37 @@ Verificação em produção: após o merge e o deploy. A migração só acrescen
 - A exclusão de contas após a retenção não foi implementada: é irreversível e depende de autorização explícita.
 - O prazo de 1 ano após o cancelamento foi citado como exemplo e deve ser confirmado com o jurídico.
 - Uma execução local da integração falhou em `tests/integration/auth/mfa.test.ts` ("falha ao confirmar"), num teste que esta mudança não toca (diff contra `main` vazio nessa área); a execução seguinte passou 123/123. Causa provável: o teste confirma com o código do passo TOTP anterior (`-1`) e falha se o passo de 30 s virar entre gerar o código e o servidor verificar — mais provável com a máquina sob carga. Correção sugerida, ainda não feita: fixar o relógio nesse teste.
+
+---
+
+## 2026-09-11 — FASE 3: API do Builder e início do trial
+
+### O que foi feito
+
+| Item | Evidência |
+|---|---|
+| Catálogo | `GET /api/builder/catalog`: 17 módulos e 6 kits com preços vigentes, moeda e duração do trial |
+| Preço em tempo real | `GET /api/builder/quote`: total avulso com sugestão de kit, ou kit + módulos fora dele |
+| Início do trial | `POST /api/builder/trial`: valida módulos, kit, disponibilidade e preço; cria a assinatura `TRIALING` de 14 dias e ativa os módulos numa transação; uma única vez por empresa |
+| Situação | `GET /api/subscription`: estado efetivo, acesso, dias restantes, kit, módulos, valor após o trial e retenção |
+| Permissões | `billing.read` e `billing.manage` só para OWNER e ADMIN; valem com a assinatura bloqueada (DEC-026) |
+| Banco | migração `20260911054436_builder_trial_and_billing_permissions`: `subscriptions.kit_key` e permissões concedidas aos OWNER/ADMIN existentes |
+| Auditoria | `subscription.trial_started` com kit, módulos e valor mensal |
+| Documentação | `docs/api/builder.md` |
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm lint` / `tsc --noEmit` | ✅ sem erros |
+| `pnpm test` | ✅ 28 arquivos, 346 testes (novos: situação e início do trial, validações, corrida, exceção das permissões de assinatura) |
+| `pnpm test:integration` | ✅ 10 arquivos, 127 testes (novos: permissões por perfil, Gestão + Contratos com R$ 169,80, escolha inválida sem efeito, empresa bloqueada vendo a assinatura) |
+| `pnpm test:e2e` | ✅ 26 testes (novos: fluxo completo do Builder, escolha inválida, sessão e origem) |
+| `pnpm build` | ✅ |
+
+Verificação em produção: após o merge e o deploy. A migração só acrescenta uma coluna opcional e permissões; nenhuma empresa é bloqueada.
+
+### Observações
+
+- A tela do Builder não existe: o frontend ainda não tem nem as telas de login.
+- Trocar kit ou módulos durante o trial ainda não é possível (seção 2.8).

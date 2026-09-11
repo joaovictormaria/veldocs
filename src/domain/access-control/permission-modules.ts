@@ -33,8 +33,25 @@ export const PERMISSION_MODULE = {
   "documents.update": "core",
   "documents.delete": "core",
   "audit.read": "core",
+  "billing.read": "core",
+  "billing.manage": "core",
 } as const satisfies Record<CatalogPermission, ModuleKey>;
 
 export function moduleOfPermission(permission: CatalogPermission): ModuleKey {
   return PERMISSION_MODULE[permission];
+}
+
+/**
+ * Permissões que valem mesmo com a assinatura inválida (trial vencido, atraso,
+ * cancelada ou suspensa). A spec (2.9) exige caminho claro para assinar ou
+ * reativar: a empresa bloqueada precisa continuar vendo a própria situação e
+ * o catálogo. Só permissões de assinatura podem entrar aqui.
+ */
+export const SUBSCRIPTION_EXEMPT_PERMISSIONS: ReadonlySet<CatalogPermission> = new Set<CatalogPermission>([
+  "billing.read",
+  "billing.manage",
+]);
+
+export function bypassesSubscription(permission: CatalogPermission): boolean {
+  return SUBSCRIPTION_EXEMPT_PERMISSIONS.has(permission);
 }
