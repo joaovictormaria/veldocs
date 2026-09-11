@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { safeNextPath } from "@/presentation/api-client";
 import { LoginForm } from "@/presentation/screens/login-form";
-import { currentSession, nextStepFor } from "../_lib/session";
+import { currentSession } from "../_lib/session";
 
 /** Nonce da CSP exige renderização dinâmica (ver src/proxy.ts). */
 export const dynamic = "force-dynamic";
@@ -13,8 +13,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const { next } = await searchParams;
   const destination = safeNextPath(typeof next === "string" ? next : null);
 
+  // Quem já entrou segue para o destino; o padrão (`/inicio`) decide o próximo passo.
   const session = await currentSession();
-  if (session) redirect(destination === "/inicio" ? nextStepFor(session) : destination);
+  if (session) redirect(destination);
 
   return <LoginForm next={destination} />;
 }

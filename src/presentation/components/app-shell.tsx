@@ -4,6 +4,7 @@ import { BrandLogo } from "@/presentation/components/ui";
 import { LogoutButton } from "@/presentation/screens/logout-button";
 
 const NAV = [
+  { href: "/painel", label: "Painel" },
   { href: "/documentos", label: "Documentos" },
   { href: "/vencimentos", label: "Vencimentos", module: "vencimentos" },
   { href: "/categorias", label: "Categorias" },
@@ -36,7 +37,9 @@ export function AppShell({
       <header className="border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 py-4">
           <div className="flex items-center gap-4">
-            <BrandLogo className="w-28" />
+            <Link href="/painel" aria-label="VELDOCS — ir para o painel">
+              <BrandLogo className="w-28" />
+            </Link>
             <span className="hidden text-sm text-slate-500 sm:inline">{companyName}</span>
           </div>
 

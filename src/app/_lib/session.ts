@@ -14,3 +14,17 @@ export function nextStepFor(session: CurrentSession): "/seguranca" | "/builder" 
   const { required, configured, verified } = session.mfa;
   return required && !(configured && verified) ? "/seguranca" : "/builder";
 }
+
+/**
+ * Onde a pessoa começa depois de entrar: o Builder enquanto a empresa ainda
+ * não escolheu os módulos (e só para quem pode escolher); nos demais casos, o
+ * painel. Quem não gerencia a assinatura nunca cai numa tela que não pode usar.
+ */
+export async function landingPath(): Promise<"/builder" | "/painel"> {
+  const services = getAuthServices();
+  const authorization = await services.authorize(await readSessionToken(getEnv().APP_URL), "billing.manage");
+  if (!authorization.ok) return "/painel";
+
+  const subscription = await services.subscriptions.getSummary(authorization.context);
+  return subscription.status === "NOT_STARTED" ? "/builder" : "/painel";
+}

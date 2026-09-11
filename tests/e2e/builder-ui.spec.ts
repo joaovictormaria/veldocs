@@ -115,7 +115,11 @@ test("convite pela tela: o convidado se cadastra e entra na empresa", async ({ p
     await guest.getByLabel("Crie uma senha").fill(PASSWORD);
     await guest.getByRole("button", { name: "Entrar na empresa" }).click();
 
-    await expect(guest).toHaveURL(/\/builder$/);
+    // Colaborador não escolhe módulos: começa pelo painel, não pelo Builder.
+    await expect(guest).toHaveURL(/\/painel$/);
+    await expect(guest.getByRole("heading", { name: "Olá, Pessoa" })).toBeVisible();
+
+    await guest.goto("/builder");
     await expect(guest.getByText("Somente Proprietário ou Administrador podem escolher os módulos da empresa.")).toBeVisible();
 
     await guest.goto(invitePath);

@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Verificação em duas etapas — VEL
 export default async function SecurityPage() {
   const session = await currentSession();
   if (!session) redirect("/entrar?next=/seguranca");
-  if (nextStepFor(session) !== "/seguranca") redirect("/builder");
+  if (nextStepFor(session) !== "/seguranca") redirect("/inicio");
 
   return <MfaForm mode={session.mfa.configured ? "verify" : "enroll"} />;
 }

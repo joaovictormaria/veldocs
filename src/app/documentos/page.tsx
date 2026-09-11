@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { EXPIRATIONS_MODULE_KEY } from "@/domain/documents/expiration";
+import { EXPIRATION_STATUSES, EXPIRATIONS_MODULE_KEY } from "@/domain/documents/expiration";
 import { getAuthServices } from "@/infrastructure/composition/auth-services";
 import { getEnv } from "@/infrastructure/config/env";
 import { readSessionToken } from "@/infrastructure/http/session-cookie";
@@ -14,12 +14,24 @@ export const metadata: Metadata = { title: "Documentos — VELDOCS" };
 
 const EMPTY_LISTING = { items: [], total: 0, page: 1, pageSize: 20 } as const;
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * A lista, as categorias e as listas de apoio são carregadas aqui, no servidor,
  * com a mesma autorização das rotas da API. Cada lista de apoio depende da
  * permissão correspondente, lida do próprio contexto autorizado.
  */
-export default async function DocumentsPage() {
+export default async function DocumentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const param = (key: string) => {
+    const value = params[key];
+    return typeof value === "string" ? value : "";
+  };
+
   const session = await currentSession();
   if (!session) redirect("/entrar?next=/documentos");
   if (nextStepFor(session) !== "/builder") redirect("/seguranca");
@@ -50,8 +62,15 @@ export default async function DocumentsPage() {
   // Situação de vencimento é capacidade de módulo pago (MASTER SPEC 10.2).
   const expirations = (await services.entitlements.checkModule(context.companyId, EXPIRATIONS_MODULE_KEY)) === "enabled";
 
+  // Links do painel abrem a lista já filtrada. Valor inválido é ignorado, e
+  // situação só vale com o módulo.
+  const initialFilters = {
+    status: expirations && (EXPIRATION_STATUSES as readonly string[]).includes(param("status")) ? param("status") : "",
+    categoryId: UUID.test(param("categoryId")) ? param("categoryId") : "",
+  };
+
   const [listing, categories, branches, departments, members, tags] = await Promise.all([
-    services.documents.list(context, {}, { expirations }),
+    services.documents.list(context, initialFilters, { expirations }),
     can("categories.read") ? services.categories.list(context) : [],
     can("branches.read") ? services.companyManagement.listBranches(context) : [],
     can("departments.read") ? services.companyManagement.listDepartments(context) : [],
@@ -80,6 +99,7 @@ export default async function DocumentsPage() {
         remove: can("documents.delete"),
       },
       expirations,
+      initialFilters,
     }),
   ) as DocumentsData;
 
