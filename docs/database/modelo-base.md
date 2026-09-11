@@ -1,4 +1,4 @@
-# VELDOCS — Modelo de dados base (FASE 1)
+# VELDOCS — Modelo de dados
 
 Fonte da verdade: [`prisma/schema.prisma`](../../prisma/schema.prisma) e [`prisma/migrations/`](../../prisma/migrations/).
 
@@ -11,7 +11,7 @@ Fonte da verdade: [`prisma/schema.prisma`](../../prisma/schema.prisma) e [`prism
 | Datas-hora | `timestamptz(3)`; datas de negócio (`issue_date`, `expiration_date`) como `date` |
 | Campos de auditoria | `created_at`, `updated_at`; `deleted_at` para soft delete onde aplicável |
 | Tenant | `company_id` (equivalente ao `tenant_id` do MASTER SPEC) |
-| Exclusão | `ON DELETE RESTRICT` por padrão; `CASCADE` apenas em tabelas de junção |
+| Exclusão | `ON DELETE RESTRICT` por padrão; `CASCADE` apenas em junções e sessões |
 
 ## Entidades
 
@@ -20,50 +20,70 @@ Fonte da verdade: [`prisma/schema.prisma`](../../prisma/schema.prisma) e [`prism
 | `companies` | tenant raiz | `slug` único; `status` ACTIVE/SUSPENDED |
 | `branches` | tenant | `code` único por empresa |
 | `departments` | tenant | opcionalmente vinculado a uma filial do mesmo tenant |
-| `users` | tenant | `email` único global e em minúsculas (CHECK); status INVITED/ACTIVE/DISABLED; sem credenciais (FASE 2) |
-| `roles` | tenant | `key` única por empresa; `is_system` para perfis padrão |
+| `users` | **global (pessoa)** | e-mail único e em minúsculas; CPF opcional só como HMAC + cifrado; hash Argon2id; status ACTIVE/DISABLED |
+| `memberships` | tenant | vínculo pessoa ↔ empresa; `(company_id, user_id)` único; status INVITED/ACTIVE/SUSPENDED |
+| `roles` | tenant | `key` única por empresa; `is_system` para os 5 perfis padrão |
 | `permissions` | **global** | catálogo do sistema; `key` única no formato `recurso.acao` (CHECK) |
 | `role_permissions` | via `roles` | junção perfil ↔ permissão |
-| `user_roles` | tenant | junção usuário ↔ perfil com `company_id` explícito |
+| `user_roles` | tenant | perfil de um **membro**: FK `(company_id, user_id)` → `memberships` |
 | `document_categories` | tenant | hierarquia (subcategoria) dentro do mesmo tenant |
-| `documents` | tenant | metadados; categoria, filial, setor, responsável e criador do mesmo tenant |
-| `audit_logs` | tenant (opcional) | append-only; `company_id` nulo apenas para eventos sem tenant resolvido |
+| `documents` | tenant | metadados; categoria, filial, setor do mesmo tenant; responsável e criador precisam ser membros |
+| `audit_logs` | tenant (opcional) | append-only; sem empresa para eventos como login; com empresa, o autor precisa ser membro |
+| `sessions` | pessoa | `id` = SHA-256 do token; empresa ativa precisa ser vínculo da pessoa; expiração por inatividade e absoluta |
+| `rate_limit_buckets` | sistema | janela fixa por chave; chaves sem dado pessoal em claro |
 
 ## Isolamento multi-tenant no banco
 
-Cada entidade de tenant expõe `UNIQUE (company_id, id)`. Toda referência entre entidades do mesmo tenant usa FK composta:
+Entidades de tenant expõem `UNIQUE (company_id, id)` e toda referência entre entidades do mesmo tenant usa FK composta:
 
 ```sql
 FOREIGN KEY (company_id, category_id) REFERENCES document_categories (company_id, id)
+FOREIGN KEY (company_id, responsible_user_id) REFERENCES memberships (company_id, user_id)
 ```
 
-Consequência: o PostgreSQL **rejeita** vínculos cross-tenant mesmo que a aplicação tenha um bug (ex.: documento da empresa A com categoria da empresa B, perfil da empresa B atribuído a usuário da empresa A). Isso é uma **defesa em profundidade** — a autorização server-side por tenant (FASE 2) continua obrigatória para leituras e para filtrar consultas.
+Consequências garantidas pelo PostgreSQL, mesmo com bug na aplicação:
 
-> Nota para uso do Prisma Client: como `company_id` participa de várias relações, alterações de vínculo devem usar os campos escalares (`categoryId: null`) e não `disconnect`, que tentaria anular `company_id`.
+- documento da empresa A não aponta para categoria, filial, setor ou pessoa da empresa B;
+- perfil só é atribuído a quem é membro da empresa, e só com perfil daquela empresa;
+- sessão só tem como empresa ativa uma empresa da qual a pessoa é membro;
+- evento de auditoria de uma empresa só tem como autor um membro dela.
 
-## Regras aplicadas por SQL manual (migração `init_base_entities`)
+Isso é **defesa em profundidade** — a autorização server-side por tenant continua obrigatória para leituras e filtros.
 
-| Regra | Objeto |
-|---|---|
-| E-mail em minúsculas | `users_email_lowercase_chk` |
-| Formato `recurso.acao` | `permissions_key_format_chk` |
-| Auditoria append-only | função `audit_logs_prevent_mutation` + trigger `audit_logs_append_only` (bloqueia UPDATE/DELETE) |
+> Uso do Prisma Client: como `company_id` participa de várias relações, alterações de vínculo devem usar os campos escalares (`categoryId: null`) e não `disconnect`, que tentaria anular `company_id`.
+
+## Regras aplicadas por SQL manual
+
+| Regra | Objeto | Migração |
+|---|---|---|
+| E-mail em minúsculas | `users_email_lowercase_chk` | `init_base_entities` |
+| Formato `recurso.acao` | `permissions_key_format_chk` | `init_base_entities` |
+| Auditoria append-only | função `audit_logs_prevent_mutation` + trigger `audit_logs_append_only` | `init_base_entities` |
+| CPF só como HMAC hexadecimal | `users_cpf_lookup_hash_format_chk` | `identity_memberships_sessions` |
+| Hash e valor cifrado do CPF em par | `users_cpf_fields_paired_chk` | `identity_memberships_sessions` |
+| Id de sessão é SHA-256 | `sessions_id_format_chk` | `identity_memberships_sessions` |
+| Inatividade ≤ expiração absoluta | `sessions_expiry_order_chk` | `identity_memberships_sessions` |
+| Contador de tentativas positivo | `rate_limit_buckets_count_positive_chk` | `identity_memberships_sessions` |
 
 ## Migrações
 
 | Migração | Conteúdo |
 |---|---|
 | `20260910225812_init_base_entities` | enums, 11 tabelas, índices, FKs compostas por tenant, CHECKs e trigger append-only |
+| `20260911003408_identity_memberships_sessions` | pessoa global + `memberships` (com **migração de dados**: cada pessoa existente ganha vínculo com sua empresa; `DISABLED` → vínculo `SUSPENDED`; pessoa `INVITED` → ACTIVE com vínculo `INVITED`), CPF protegido, senha, `sessions`, `rate_limit_buckets` e FKs para vínculos |
+
+A preservação de dados da migração `identity_memberships_sessions` foi verificada em 2026-09-11 num banco descartável: migração 1 → dados no formato antigo (pessoas INVITED/ACTIVE/DISABLED, perfil, documento com responsável e criador, auditoria) → migração 2 → vínculos e status corretos, nenhum registro perdido.
 
 Fluxo:
 
-- desenvolvimento: `pnpm db:migrate` (`prisma migrate dev`);
+- desenvolvimento: `pnpm db:migrate` (`prisma migrate dev`, interativo). Em ambiente não interativo, gerar o SQL com `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` e revisar;
 - staging/produção: `pnpm db:deploy` (`prisma migrate deploy`) — nunca `migrate dev`/`reset`;
-- testes de integração aplicam `migrate deploy` no banco `*_test` automaticamente.
+- testes de integração recriam o schema do banco `*_test` e aplicam `migrate deploy` a cada execução.
 
 ## Decisões pendentes
 
-- **DEC-005:** usuário pertence a uma única empresa e e-mail é único global. Usuários multiempresa (ex.: contadores) exigirão uma entidade de vínculo (membership) — decidir antes da FASE 4.
 - Unicidade de CNPJ (`tax_id`) entre empresas.
 - Retenção/expurgo de `audit_logs` (append-only) frente a LGPD — definir procedimento controlado.
-- Row-Level Security (RLS) do PostgreSQL como camada adicional de isolamento — avaliar na FASE 2.
+- Rotação das chaves `APP_ENCRYPTION_KEY` (formato cifrado já é versionado: `v1.`) e `APP_HMAC_KEY`.
+- Limpeza periódica de `sessions` expiradas e `rate_limit_buckets` vencidos (job).
+- Row-Level Security (RLS) do PostgreSQL como camada adicional de isolamento.

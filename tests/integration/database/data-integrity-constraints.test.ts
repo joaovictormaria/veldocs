@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@/generated/prisma/client";
+import { sha256Hex } from "@/infrastructure/security/crypto";
 import { createTenantFixture, createTestPrismaClient, truncateAllTables } from "../support/database";
 
 type Tenant = Awaited<ReturnType<typeof createTenantFixture>>;
 
 const UNIQUE_VIOLATION = { code: "P2002" };
+const VALID_LOOKUP_HASH = "a".repeat(64);
 
 let prisma: PrismaClient;
 let a: Tenant;
@@ -73,19 +75,75 @@ describe("audit_logs append-only", () => {
   });
 });
 
-describe("usuários", () => {
+describe("pessoas", () => {
   it("exige e-mail normalizado em minúsculas", async () => {
     await expect(
-      prisma.user.create({
-        data: { companyId: a.company.id, email: "Maria.Silva@Example.com", name: "Maria" },
-      }),
+      prisma.user.create({ data: { email: "Maria.Silva@Example.com", name: "Maria" } }),
     ).rejects.toThrow(/users_email_lowercase_chk/);
   });
 
-  it("não permite o mesmo e-mail em duas empresas (DEC-005)", async () => {
+  it("e-mail é único globalmente, mesmo para pessoas de empresas diferentes", async () => {
+    await expect(prisma.user.create({ data: { email: a.user.email, name: "Duplicado" } })).rejects.toMatchObject(
+      UNIQUE_VIOLATION,
+    );
+  });
+
+  it("CPF só pode ser gravado como hash hexadecimal de 64 caracteres", async () => {
     await expect(
-      prisma.user.create({ data: { companyId: b.company.id, email: a.user.email, name: "Duplicado" } }),
+      prisma.user.create({
+        data: { email: "cpf-claro@example.com", name: "CPF", cpfLookupHash: "52998224725", cpfEncrypted: "v1.a.b.c" },
+      }),
+    ).rejects.toThrow(/users_cpf_lookup_hash_format_chk/);
+  });
+
+  it("hash e valor cifrado do CPF são gravados sempre em par", async () => {
+    await expect(
+      prisma.user.create({ data: { email: "cpf-sem-par@example.com", name: "CPF", cpfLookupHash: VALID_LOOKUP_HASH } }),
+    ).rejects.toThrow(/users_cpf_fields_paired_chk/);
+  });
+
+  it("não permite o mesmo CPF para duas pessoas", async () => {
+    const cpf = { cpfLookupHash: VALID_LOOKUP_HASH, cpfEncrypted: "v1.a.b.c" };
+    await prisma.user.update({ where: { id: a.user.id }, data: cpf });
+
+    await expect(prisma.user.update({ where: { id: b.user.id }, data: cpf })).rejects.toMatchObject(UNIQUE_VIOLATION);
+  });
+
+  it("não permite vínculo duplicado da mesma pessoa com a mesma empresa", async () => {
+    await expect(
+      prisma.membership.create({ data: { companyId: a.company.id, userId: a.user.id } }),
     ).rejects.toMatchObject(UNIQUE_VIOLATION);
+  });
+});
+
+describe("sessões e rate limiting", () => {
+  const future = (ms: number) => new Date(Date.now() + ms);
+
+  it("id da sessão precisa ser SHA-256 hexadecimal (o token nunca é gravado)", async () => {
+    await expect(
+      prisma.session.create({
+        data: { id: "token-em-claro", userId: a.user.id, expiresAt: future(60_000), absoluteExpiresAt: future(120_000) },
+      }),
+    ).rejects.toThrow(/sessions_id_format_chk/);
+  });
+
+  it("expiração por inatividade não pode passar da absoluta", async () => {
+    await expect(
+      prisma.session.create({
+        data: {
+          id: sha256Hex("token"),
+          userId: a.user.id,
+          expiresAt: future(120_000),
+          absoluteExpiresAt: future(60_000),
+        },
+      }),
+    ).rejects.toThrow(/sessions_expiry_order_chk/);
+  });
+
+  it("contador de rate limit é sempre positivo", async () => {
+    await expect(
+      prisma.rateLimitBucket.create({ data: { key: "teste", count: 0, resetAt: future(60_000) } }),
+    ).rejects.toThrow(/rate_limit_buckets_count_positive_chk/);
   });
 });
 

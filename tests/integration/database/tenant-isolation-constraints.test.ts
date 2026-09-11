@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@/generated/prisma/client";
+import { sha256Hex } from "@/infrastructure/security/crypto";
 import { createTenantFixture, createTestPrismaClient, truncateAllTables } from "../support/database";
 
 /**
- * As FKs compostas (company_id, <fk>) → (company_id, id) devem impedir, no
- * próprio banco, qualquer vínculo entre dados de empresas diferentes.
+ * As FKs compostas devem impedir, no próprio banco, qualquer vínculo entre
+ * dados de empresas diferentes — inclusive usar uma pessoa que não é membro
+ * da empresa.
  */
 
 type Tenant = Awaited<ReturnType<typeof createTenantFixture>>;
@@ -76,6 +78,16 @@ describe("documentos", () => {
     const unchanged = await prisma.document.findUniqueOrThrow({ where: { id: document.id } });
     expect(unchanged.categoryId).toBe(a.category.id);
   });
+
+  it("aceita como responsável em B a pessoa de A que também é membro de B (multiempresa)", async () => {
+    await prisma.membership.create({ data: { companyId: b.company.id, userId: a.user.id, status: "ACTIVE" } });
+
+    const document = await prisma.document.create({
+      data: { companyId: b.company.id, title: "Laudo técnico", responsibleUserId: a.user.id },
+    });
+
+    expect(document.responsibleUserId).toBe(a.user.id);
+  });
 });
 
 describe("estrutura organizacional", () => {
@@ -104,8 +116,8 @@ describe("estrutura organizacional", () => {
   });
 });
 
-describe("RBAC", () => {
-  it("aceita atribuir perfil do mesmo tenant", async () => {
+describe("RBAC e vínculos", () => {
+  it("aceita atribuir perfil do mesmo tenant a um membro", async () => {
     await prisma.userRole.create({
       data: { companyId: a.company.id, userId: a.user.id, roleId: a.role.id },
     });
@@ -113,7 +125,7 @@ describe("RBAC", () => {
     expect(await prisma.userRole.count({ where: { companyId: a.company.id } })).toBe(1);
   });
 
-  it("rejeita atribuir a usuário da empresa A um perfil da empresa B", async () => {
+  it("rejeita atribuir a membro da empresa A um perfil da empresa B", async () => {
     await expect(
       prisma.userRole.create({
         data: { companyId: a.company.id, userId: a.user.id, roleId: b.role.id },
@@ -121,21 +133,43 @@ describe("RBAC", () => {
     ).rejects.toMatchObject(FOREIGN_KEY_VIOLATION);
   });
 
-  it("rejeita atribuição que declara um tenant diferente do usuário", async () => {
+  it("rejeita atribuir perfil da empresa A a quem não é membro dela", async () => {
     await expect(
       prisma.userRole.create({
         data: { companyId: a.company.id, userId: b.user.id, roleId: a.role.id },
       }),
     ).rejects.toMatchObject(FOREIGN_KEY_VIOLATION);
   });
+
+  it("rejeita sessão com empresa ativa da qual a pessoa não é membro", async () => {
+    const now = Date.now();
+
+    await expect(
+      prisma.session.create({
+        data: {
+          id: sha256Hex("token-de-teste"),
+          userId: a.user.id,
+          activeCompanyId: b.company.id,
+          expiresAt: new Date(now + 60_000),
+          absoluteExpiresAt: new Date(now + 120_000),
+        },
+      }),
+    ).rejects.toMatchObject(FOREIGN_KEY_VIOLATION);
+  });
 });
 
 describe("auditoria", () => {
-  it("rejeita evento da empresa A atribuído a usuário da empresa B", async () => {
+  it("rejeita evento da empresa A atribuído a quem não é membro dela", async () => {
     await expect(
       prisma.auditLog.create({
         data: { companyId: a.company.id, actorUserId: b.user.id, action: "document.created" },
       }),
     ).rejects.toMatchObject(FOREIGN_KEY_VIOLATION);
+  });
+
+  it("aceita evento sem empresa atribuído a qualquer pessoa existente (ex.: login)", async () => {
+    const event = await prisma.auditLog.create({ data: { actorUserId: b.user.id, action: "auth.login_succeeded" } });
+
+    expect(event.companyId).toBeNull();
   });
 });

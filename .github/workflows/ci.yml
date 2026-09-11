@@ -35,13 +35,16 @@ jobs:
           --health-timeout 5s
           --health-retries 20
 
-    # Credenciais descartáveis do Postgres efêmero do CI (não são secrets).
+    # Credenciais e chaves descartáveis, exclusivas do CI (não são secrets e
+    # nunca devem ser usadas em outro ambiente).
     env:
       APP_ENV: development
       APP_URL: http://localhost:3000
       LOG_LEVEL: warn
       DATABASE_URL: postgresql://veldocs:veldocs_ci_only@localhost:5432/veldocs_ci
       TEST_DATABASE_URL: postgresql://veldocs:veldocs_ci_only@localhost:5432/veldocs_test
+      APP_ENCRYPTION_KEY: Y2ktb25seS1lbmNyeXB0aW9uLWtleS0zMmJ5dGVzISE=
+      APP_HMAC_KEY: Y2ktb25seS1obWFjLWtleS1ub3QtYS1zZWNyZXQtIyMj
 
     steps:
       - name: Checkout

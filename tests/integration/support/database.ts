@@ -1,10 +1,21 @@
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@/generated/prisma/client";
+import { buildAuthServices } from "@/infrastructure/composition/auth-services";
 import { createPrismaClient } from "@/infrastructure/database/prisma-client";
 import { getTestDatabaseUrl } from "./test-database-url";
 
+/** Chaves de TESTE (não são secrets). */
+export const TEST_APPLICATION_KEYS = {
+  APP_ENCRYPTION_KEY: Buffer.from("0123456789abcdef0123456789abcdef").toString("base64"),
+  APP_HMAC_KEY: Buffer.from("fedcba9876543210fedcba9876543210").toString("base64"),
+} as const;
+
 export function createTestPrismaClient(): PrismaClient {
   return createPrismaClient(getTestDatabaseUrl());
+}
+
+export function createTestAuthServices(prisma: PrismaClient, now?: () => Date) {
+  return buildAuthServices(prisma, TEST_APPLICATION_KEYS, now);
 }
 
 /** Limpa todas as tabelas da aplicação (inclusive audit_logs: TRUNCATE não dispara o trigger de UPDATE/DELETE). */
@@ -19,7 +30,7 @@ export async function truncateAllTables(prisma: PrismaClient): Promise<void> {
   await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${tables.join(", ")} RESTART IDENTITY CASCADE`);
 }
 
-/** Cria um tenant completo (empresa, filial, setor, usuário, perfil e categoria). */
+/** Cria um tenant completo: empresa, filial, setor, pessoa com vínculo ativo, perfil e categoria. */
 export async function createTenantFixture(prisma: PrismaClient, label: string) {
   const suffix = randomUUID().slice(0, 8);
 
@@ -33,11 +44,10 @@ export async function createTenantFixture(prisma: PrismaClient, label: string) {
     data: { companyId: company.id, branchId: branch.id, name: "Financeiro" },
   });
   const user = await prisma.user.create({
-    data: {
-      companyId: company.id,
-      email: `usuario-${label}-${suffix}@example.com`.toLowerCase(),
-      name: `Usuário ${label}`,
-    },
+    data: { email: `usuario-${label}-${suffix}@example.com`.toLowerCase(), name: `Usuário ${label}` },
+  });
+  const membership = await prisma.membership.create({
+    data: { companyId: company.id, userId: user.id, status: "ACTIVE" },
   });
   const role = await prisma.role.create({
     data: { companyId: company.id, key: "ADMIN", name: "Administrador", isSystem: true },
@@ -46,5 +56,5 @@ export async function createTenantFixture(prisma: PrismaClient, label: string) {
     data: { companyId: company.id, name: "Licenças e alvarás" },
   });
 
-  return { company, branch, department, user, role, category };
+  return { company, branch, department, user, membership, role, category };
 }

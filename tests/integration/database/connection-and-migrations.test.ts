@@ -12,16 +12,19 @@ import {
 import { createPrismaClient } from "@/infrastructure/database/prisma-client";
 import { createTestPrismaClient } from "../support/database";
 
-const BASE_TABLES = [
+const APPLICATION_TABLES = [
   "audit_logs",
   "branches",
   "companies",
   "departments",
   "document_categories",
   "documents",
+  "memberships",
   "permissions",
+  "rate_limit_buckets",
   "role_permissions",
   "roles",
+  "sessions",
   "user_roles",
   "users",
 ];
@@ -32,9 +35,9 @@ const TENANT_SCOPED_TABLES = [
   "departments",
   "document_categories",
   "documents",
+  "memberships",
   "roles",
   "user_roles",
-  "users",
 ];
 
 let prisma: PrismaClient;
@@ -54,28 +57,31 @@ describe("conexão e migrações", () => {
     expect(row?.version).toMatch(/^PostgreSQL \d+/);
   });
 
-  it("aplicou a migração inicial com sucesso", async () => {
+  it("aplicou as migrações com sucesso", async () => {
     const rows = await prisma.$queryRaw<Array<{ migration_name: string }>>`
       SELECT migration_name FROM _prisma_migrations
       WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL
     `;
 
     expect(rows.map((row) => row.migration_name)).toEqual(
-      expect.arrayContaining([expect.stringMatching(/_init_base_entities$/)]),
+      expect.arrayContaining([
+        expect.stringMatching(/_init_base_entities$/),
+        expect.stringMatching(/_identity_memberships_sessions$/),
+      ]),
     );
   });
 
-  it("criou exatamente as tabelas base", async () => {
+  it("criou exatamente as tabelas da aplicação", async () => {
     const rows = await prisma.$queryRaw<Array<{ table_name: string }>>`
       SELECT table_name FROM information_schema.tables
       WHERE table_schema = 'public' AND table_type = 'BASE TABLE' AND table_name <> '_prisma_migrations'
       ORDER BY table_name
     `;
 
-    expect(rows.map((row) => row.table_name)).toEqual(BASE_TABLES);
+    expect(rows.map((row) => row.table_name)).toEqual(APPLICATION_TABLES);
   });
 
-  it("toda tabela de dados empresariais possui company_id obrigatório", async () => {
+  it("toda tabela de dados empresariais possui company_id obrigatório e users não pertence a empresa", async () => {
     const rows = await prisma.$queryRaw<Array<{ table_name: string; is_nullable: string }>>`
       SELECT table_name, is_nullable FROM information_schema.columns
       WHERE table_schema = 'public' AND column_name = 'company_id'
@@ -85,8 +91,9 @@ describe("conexão e migrações", () => {
     for (const table of TENANT_SCOPED_TABLES) {
       expect(nullableByTable[table], table).toBe("NO");
     }
-    // Auditoria aceita eventos sem tenant resolvido (ex.: falha de login).
+    // Auditoria aceita eventos sem empresa (ex.: login); a pessoa é global (DEC-005).
     expect(nullableByTable.audit_logs).toBe("YES");
+    expect(nullableByTable.users).toBeUndefined();
   });
 });
 

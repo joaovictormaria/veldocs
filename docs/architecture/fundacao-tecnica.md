@@ -142,8 +142,57 @@ Variáveis do serviço `veldocs-app` (valores ficam somente no Railway):
 | `LOG_LEVEL` | `info` |
 | `PORT` | `3000` |
 | `DATABASE_URL` | referência `${{Postgres.DATABASE_URL}}` (host interno `postgres.railway.internal`) |
+| `APP_ENCRYPTION_KEY` | 32 bytes aleatórios em base64 (secret; nunca exibido) |
+| `APP_HMAC_KEY` | 32 bytes aleatórios em base64 (secret; nunca exibido) |
+
+> ⚠️ **Guarde uma cópia de `APP_ENCRYPTION_KEY` e `APP_HMAC_KEY` em um cofre de senhas.** Sem a chave de criptografia os CPFs cifrados não podem ser lidos; sem a chave HMAC o login por CPF deixa de encontrar as contas. Trocar as chaves exige um procedimento de rotação (pendente).
 
 As configurações de deploy (pre-deploy, start, healthcheck, restart) estão aplicadas diretamente no serviço, pela API do Railway. O `railway.json` (Config as Code, depreciado pelo Railway) não era aplicado a este serviço e foi removido. A migração para Infrastructure as Code (`.railway/railway.ts`) está pendente: o arquivo precisa declarar também variáveis e origem do repositório, senão o `railway config apply` as remove.
+
+## Identidade e autenticação (FASE 2 — em andamento)
+
+### Modelo
+
+- `users` é a **pessoa** (identidade global): e-mail único, CPF opcional e senha. A pessoa **não pertence** a uma empresa.
+- `memberships` é o **vínculo** pessoa ↔ empresa (`INVITED`, `ACTIVE`, `SUSPENDED`). Uma pessoa pode estar em várias empresas (DEC-005).
+- Perfis (`user_roles`), responsável/criador de documento, autor de auditoria e empresa ativa da sessão referenciam o vínculo `(company_id, user_id)`: o banco rejeita quem não é membro da empresa.
+- **CPF** nunca é gravado em claro: `cpf_lookup_hash` = HMAC-SHA256 (busca e unicidade) e `cpf_encrypted` = AES-256-GCM com contexto autenticado `users.cpf`.
+- **Senha**: Argon2id (19 MiB, 2 iterações, paralelismo 1); mínimo de 12 e máximo de 128 caracteres, sem regras de composição.
+
+### Endpoints
+
+| Método e rota | Função | Respostas |
+|---|---|---|
+| `POST /api/auth/signup` | cria pessoa, empresa, 5 perfis padrão e vínculo OWNER; inicia sessão na empresa | `201`, `400 invalid_input` (com campos), `409 registration_unavailable` (genérico), `429` |
+| `POST /api/auth/login` | login por e-mail **ou** CPF + senha | `200`, `400`, `401 invalid_credentials` (idêntico para qualquer falha), `429` com `Retry-After` |
+| `POST /api/auth/logout` | revoga a sessão atual e apaga o cookie | `204` |
+| `POST /api/auth/logout-all` | revoga todas as sessões da pessoa | `204`, `401` |
+| `GET /api/auth/session` | pessoa, empresa ativa e vínculos com perfis | `200`, `401` |
+
+Rotas que alteram estado exigem `Origin` igual a `APP_URL` (ou `Sec-Fetch-Site: same-origin`) e corpo `application/json` de até 16 KB.
+
+### Sessão
+
+- Token aleatório de 256 bits no cookie; no banco fica apenas o SHA-256 (`sessions.id`).
+- Cookie `HttpOnly`, `SameSite=Lax`, `Path=/`; em HTTPS, `Secure` e prefixo `__Host-veldocs_session`.
+- Expira após **7 dias sem uso** (renovada com o uso) e nunca passa de **30 dias** desde o login.
+- Todo login gera sessão nova (sem session fixation). Se a pessoa tem um único vínculo ativo, a empresa ativa é definida automaticamente.
+
+### Limites de tentativa e auditoria
+
+| Regra | Limite |
+|---|---|
+| Login por IP | 30 em 15 min |
+| Login por conta (HMAC do e-mail/CPF normalizado) | 10 em 15 min |
+| Cadastro por IP | 10 por hora |
+
+Implementação em PostgreSQL (`rate_limit_buckets`, UPSERT atômico); substituível por Redis. O IP vem do último valor de `X-Forwarded-For` (acrescentado pelo proxy do Railway).
+
+Eventos auditados: `auth.account_registered`, `company.created`, `auth.login_succeeded`, `auth.login_failed`, `auth.login_rate_limited`, `auth.register_rate_limited`, `auth.logout`, `auth.logout_all`. Metadados nunca contêm senha, token, e-mail digitado ou CPF.
+
+### Pendente na FASE 2
+
+Empresa ativa e verificação de permissões (RBAC) nas rotas de negócio; MFA obrigatório para OWNER/ADMIN (app autenticador + códigos de recuperação); link mágico e recuperação de senha (serviço de e-mail a definir); login com Google; headers de segurança (CSP, HSTS) e logs estruturados; rotação de chaves.
 
 ## Primeiros passos (desenvolvimento)
 
