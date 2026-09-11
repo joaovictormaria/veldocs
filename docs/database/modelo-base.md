@@ -31,6 +31,7 @@ Fonte da verdade: [`prisma/schema.prisma`](../../prisma/schema.prisma) e [`prism
 | `documents` | tenant | metadados; categoria, filial, setor do mesmo tenant; responsável e criador precisam ser membros; `search_text` guarda título, descrição e etiquetas sem acento para a busca (DEC-031) |
 | `tags` | tenant | etiqueta livre da empresa; `normalized_name` único por empresa evita duplicar por acento ou maiúscula (DEC-032) |
 | `document_tags` | tenant | junção documento ↔ etiqueta, com FKs compostas: os dois são sempre da mesma empresa |
+| `document_files` | tenant | metadados dos arquivos no bucket privado; situação PENDING/AVAILABLE/REJECTED; a chave do objeto é feita dos ids da linha e nunca do nome original (DEC-035) |
 | `audit_logs` | tenant (opcional) | append-only; sem empresa para eventos como login; com empresa, o autor precisa ser membro |
 | `sessions` | pessoa | `id` = SHA-256 do token; empresa ativa precisa ser vínculo da pessoa; expiração por inatividade e absoluta |
 | `rate_limit_buckets` | sistema | janela fixa por chave; chaves sem dado pessoal em claro |
@@ -91,6 +92,9 @@ Isso é **defesa em profundidade** — a autorização server-side por tenant co
 | Categoria com nome não vazio e que não é filha de si mesma | `document_categories_name_not_blank_chk`, `document_categories_not_own_parent_chk` | `documents_categories_tags` |
 | Etiqueta com nome não vazio e nome normalizado em minúsculas, sem espaços nas pontas | `tags_name_not_blank_chk`, `tags_normalized_name_format_chk` | `documents_categories_tags` |
 | Permissões do Controle de vencimentos: leitura para os 5 perfis padrão, renovação para OWNER, ADMIN, GESTOR e COLABORADOR | `INSERT` em `permissions` e `INSERT … SELECT` em `role_permissions` | `expiration_permissions` |
+| Chave do objeto igual a `companies/{company_id}/documents/{document_id}/files/{id}` da própria linha | `document_files_object_key_matches_ids_chk` | `document_files` |
+| Tipo na allowlist, tamanho de 1 byte a 25 MB e nome não vazio | `document_files_content_type_chk`, `document_files_size_chk`, `document_files_file_name_not_blank_chk` | `document_files` |
+| Disponível sempre com data e recusado sempre com motivo | `document_files_available_at_chk`, `document_files_rejection_reason_chk` | `document_files` |
 
 ## Migrações
 
@@ -106,6 +110,7 @@ Isso é **defesa em profundidade** — a autorização server-side por tenant co
 | `20260911061303_members_invitations` | status `REMOVED` em `MembershipStatus` e tabela `company_invitations` |
 | `20260911173626_documents_categories_tags` | coluna `documents.search_text` (padrão `''`), tabelas `tags` e `document_tags` e os CHECKs do núcleo documental |
 | `20260911184354_expiration_permissions` | permissões `expirations.read` e `expirations.manage` (módulo Controle de vencimentos), concedidas aos perfis de sistema das empresas existentes |
+| `20260911200000_document_files` | enum `DocumentFileStatus` e tabela `document_files` com os CHECKs de chave, tipo, tamanho e situação |
 
 A preservação de dados da migração `identity_memberships_sessions` foi verificada em 2026-09-11 num banco descartável: migração 1 → dados no formato antigo (pessoas INVITED/ACTIVE/DISABLED, perfil, documento com responsável e criador, auditoria) → migração 2 → vínculos e status corretos, nenhum registro perdido.
 
@@ -123,4 +128,5 @@ Fluxo:
 - Limpeza periódica de `sessions` expiradas e `rate_limit_buckets` vencidos (job).
 - Row-Level Security (RLS) do PostgreSQL como camada adicional de isolamento.
 - Índice de texto para a busca documental (trigrama ou `tsvector` sobre `documents.search_text`), quando o volume justificar (DEC-031).
+- Limpeza de `document_files` PENDING vencidos e retenção dos objetos de arquivos removidos (DEC-035): o bucket não tem versionamento, então qualquer expurgo é irreversível e precisa de regra aprovada.
 - Exclusão de contas após o prazo de retenção (DEC-025): irreversível, depende de autorização explícita; o prazo legal de 1 ano após o cancelamento deve ser confirmado com o jurídico.

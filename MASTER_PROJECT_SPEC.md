@@ -365,14 +365,14 @@ O objetivo é **mostrar valor**, e não pressionar o usuário.
 - 🟡 PARCIAL — Usuários (pessoa global `users` com vínculos multiempresa `memberships`; cadastro público; convites e gestão de membros pendentes)
 - 🟡 PARCIAL — Autenticação (cadastro, login por e-mail ou CPF + senha, sessão, logout e logout geral em produção; MFA, verificação de e-mail, recuperação de senha, link mágico e Google pendentes)
 - 🟡 PARCIAL — RBAC/permissões (catálogo de 22 permissões, 5 perfis padrão e verificação de permissão em todas as rotas de negócio existentes; gestão de perfis e membros — FASE 3)
-- 🟡 PARCIAL — Multi-tenancy (FKs compostas no banco; empresa ativa na sessão e filtro por empresa nas rotas existentes; storage e demais recursos nas fases seguintes)
+- 🟡 PARCIAL — Multi-tenancy (FKs compostas no banco; empresa ativa na sessão e filtro por empresa nas rotas existentes; storage com prefixo por empresa conferido no adaptador e no banco)
 - 🔴 NÃO IMPLEMENTADO — Core modular
 - 🔴 NÃO IMPLEMENTADO — Catálogo de módulos
 - 🔴 NÃO IMPLEMENTADO — Entitlements de módulos
-- 🟡 PARCIAL — Documentos (API e tela `/documentos`: criar, editar, excluir logicamente, responsável, filial, setor, datas e etiquetas — `docs/api/documentos.md`, `docs/frontend/telas.md`; arquivo e upload pendentes — FASE 5)
+- ✅ CONCLUÍDO — Documentos (API e tela `/documentos`: criar, editar, excluir logicamente, responsável, filial, setor, datas, etiquetas e arquivos no storage privado — `docs/api/documentos.md`, `docs/api/arquivos.md`, `docs/frontend/telas.md`)
 - ✅ CONCLUÍDO — Categorias (API e tela `/categorias`: árvore de até 3 níveis, nome único entre irmãs e exclusão que recusa categoria em uso)
-- 🔴 NÃO IMPLEMENTADO — Upload seguro
-- 🔴 NÃO IMPLEMENTADO — Storage privado (somente contrato `StorageProvider`)
+- 🟡 PARCIAL — Upload seguro (envio direto ao bucket por formulário assinado, allowlist de formatos, assinatura do conteúdo e limite de 25 MB — `docs/api/arquivos.md`; antivírus pendente — DEC-035)
+- ✅ CONCLUÍDO — Storage privado (Railway Storage Buckets; envio e download só por URL assinada de curta duração; isolamento por prefixo da empresa — DEC-035)
 - ✅ CONCLUÍDO — Pesquisa (busca sem acento em título, descrição e etiquetas, com filtros, ordenação e paginação, na API e na tela de documentos)
 - ✅ CONCLUÍDO — Vencimentos (módulo Controle de vencimentos: situação automática, filtro por situação e renovação, na API e nas telas — DEC-033)
 - 🟡 PARCIAL — Alertas (painel `/vencimentos` com vencidos e a vencer em 30 dias; aviso ativo por e-mail ou WhatsApp pendente)
@@ -593,7 +593,7 @@ Poderá ser introduzido futuramente apenas para necessidades específicas de IA/
 | Zod | ✅ CONCLUÍDO | 4.6.2 |
 | Vitest / Playwright | ✅ CONCLUÍDO | 5.0.0 / 1.63.0 |
 | Redis | 🔴 NÃO IMPLEMENTADO | rate limiting provisório em PostgreSQL (DEC-016) |
-| Object Storage privado | 🔴 NÃO IMPLEMENTADO | somente contrato `StorageProvider` |
+| Object Storage privado | ✅ CONCLUÍDO | Railway Storage Buckets (S3 compatível) em produção; MinIO fixado no desenvolvimento e no CI (DEC-035) |
 | Workers assíncronos | 🔴 NÃO IMPLEMENTADO | — |
 | WhatsApp Business API | 🔴 NÃO IMPLEMENTADO | somente contrato `WhatsAppProvider` |
 | Provedor de IA | 🔴 NÃO IMPLEMENTADO | somente contrato `AiProvider` |
@@ -633,7 +633,8 @@ Nunca permitir acesso cruzado.
   - Testes: `tests/integration/database/tenant-isolation-constraints.test.ts` (17 testes) e `tests/integration/access/company-management.test.ts` — passaram.
 - 🟡 PARCIAL — Toda exclusão valida tenant: filiais e setores só são excluídos dentro da empresa da sessão (id de outra empresa responde 404) e a exclusão é lógica, recusando registro ainda em uso.
   - Testes: `tests/integration/access/company-management.test.ts` e `tests/e2e/company-management.spec.ts` — passaram.
-- 🔴 NÃO IMPLEMENTADO — Storage possui isolamento lógico por tenant (o contrato `StorageProvider` já exige `companyId`).
+- ✅ CONCLUÍDO — Storage possui isolamento lógico por tenant: a chave do objeto é `companies/{empresa}/documents/{documento}/files/{arquivo}`, o adaptador confere o prefixo da empresa antes de cada operação e um CHECK no banco exige que a chave bata com os ids da própria linha.
+  - Testes: `tests/integration/documents/document-files.test.ts` (outra empresa não alcança o arquivo pela aplicação nem pelo storage; o banco recusa chave de outra empresa) e `tests/e2e/document-files.spec.ts` — passaram.
 - ✅ CONCLUÍDO — Testes de cross-tenant existem: nível banco (17 testes), autorização e consultas com PostgreSQL (IDOR, empresa sem vínculo, vínculo e empresa suspensos) e E2E das rotas (membro de outra empresa → 404; seleção de empresa alheia → 404) — passaram. Estender a cada novo recurso.
 - ✅ CONCLUÍDO — Entitlements são associados ao tenant: `company_modules` e `subscriptions` têm `company_id NOT NULL` e a verificação é sempre por `(empresa, módulo)`.
   - Testes: `tests/integration/database/connection-and-migrations.test.ts` e `tests/integration/access/entitlements.test.ts` (o entitlement de uma empresa não vale para outra) — passaram.
@@ -686,27 +687,27 @@ Referências principais:
 
 ## 7.4 Upload
 
-> Auditado em 2026-09-11: não existe upload no projeto (FASE 5).
+> **Status (2026-09-11):** 🟡 PARCIAL — implementado na FASE 5 (`docs/api/arquivos.md`, DEC-035); antivírus pendente.
 
-- [ ] Allowlist de extensões
-- [ ] Validação MIME
-- [ ] Validação de assinatura/magic bytes
-- [ ] Limite de tamanho
-- [ ] Nome interno seguro
-- [ ] Antivírus
-- [ ] Proteção contra path traversal
-- [ ] Proteção contra arquivos maliciosos
+- [x] Allowlist de extensões — PDF, JPEG, PNG e WebP; a extensão precisa combinar com o tipo
+- [x] Validação MIME — tipo declarado na allowlist, fixado na política assinada do envio e conferido por CHECK no banco
+- [x] Validação de assinatura/magic bytes — o servidor lê o primeiro 1 KB do objeto no bucket; conteúdo que não confere é apagado
+- [x] Limite de tamanho — 25 MB no pedido, na política assinada e no banco; tamanho recebido precisa ser igual ao declarado
+- [x] Nome interno seguro — a chave do objeto só tem ids; o nome original é higienizado e usado só para exibição
+- [ ] Antivírus — pendente (DEC-035); obrigatório antes do portal de terceiros
+- [x] Proteção contra path traversal — nome sem diretórios; chave feita só de uuids, recusando qualquer outro valor
+- [ ] Proteção contra arquivos maliciosos — parcial: sem executáveis, compactados ou formatos com macros; falta a varredura
 
 ## 7.5 Storage
 
-> Auditado em 2026-09-11: não existe storage no projeto; somente o contrato `StorageProvider` (FASE 5).
+> **Status (2026-09-11):** ✅ CONCLUÍDO — Railway Storage Buckets (FASE 5, DEC-035).
 
-- [ ] Bucket privado
-- [ ] Sem listagem pública
-- [ ] Chaves aleatórias
-- [ ] Signed URLs temporárias
-- [ ] Autorização antes de gerar URL
-- [ ] Logs de acesso/download
+- [x] Bucket privado — buckets do Railway são privados e criptografados em repouso
+- [x] Sem listagem pública — acesso só com as credenciais do bucket, guardadas como variáveis do serviço
+- [x] Chaves aleatórias — ids uuid, com a empresa como prefixo
+- [x] Signed URLs temporárias — envio por formulário assinado de 10 minutos; download por URL de 5 minutos
+- [x] Autorização antes de gerar URL — sessão, empresa, permissão, módulo e arquivo da empresa, sempre antes
+- [x] Logs de acesso/download — auditoria `document_file.uploaded`, `rejected`, `downloaded` e `deleted`
 
 ## 7.6 API
 
@@ -756,7 +757,7 @@ Referências principais:
 
 # 8. SEGURANÇA DO STORAGE E DOCUMENTOS
 
-> **Status (2026-09-11):** 🔴 NÃO IMPLEMENTADO — nenhum fluxo de upload ou download existe; somente o contrato `StorageProvider`. Previsto para a FASE 5.
+> **Status (2026-09-11):** 🟡 PARCIAL — upload (validação → storage privado → registro no banco) e download (autenticação → empresa → permissão → entitlement → arquivo → URL assinada) implementados na FASE 5 (`docs/api/arquivos.md`). Antivírus, OCR, validação dos dados extraídos e aprovação ainda não existem.
 
 Fluxo esperado:
 
@@ -855,14 +856,14 @@ Entidades existentes além da lista: `Membership` (vínculo pessoa ↔ empresa),
 
 ## 10.1 Documentos
 
-> **Status (2026-09-11):** 🟡 PARCIAL — metadados completos pela API (`docs/api/documentos.md`) e pela tela `/documentos` (`docs/frontend/telas.md`). Arquivo (upload/download) é da FASE 5 e versionamento da FASE 6.
+> **Status (2026-09-11):** 🟡 PARCIAL — metadados completos pela API (`docs/api/documentos.md`) e pela tela `/documentos` (`docs/frontend/telas.md`). Arquivos no storage privado desde a FASE 5 (`docs/api/arquivos.md`); versionamento é da FASE 6.
 
 - [x] Criar — `POST /api/documents` (`documents.create`)
 - [x] Editar — `PATCH /api/documents/[documentId]`
 - [x] Excluir — exclusão lógica; nada é apagado
 - [x] Visualizar — `GET /api/documents/[documentId]` (metadados)
-- [ ] Download — depende do storage (FASE 5)
-- [ ] Upload — depende do storage (FASE 5)
+- [x] Download — URL assinada de 5 minutos, auditada
+- [x] Upload — direto ao bucket privado, com conferência do conteúdo antes de liberar
 - [x] Categorias — árvore de até 3 níveis (DEC-032)
 - [x] Tags — etiquetas por empresa, sem duplicar por acento ou maiúscula (DEC-032)
 - [x] Responsável — membro ativo da empresa
@@ -1148,8 +1149,8 @@ Registrar, quando aplicável:
 - ✅ CONCLUÍDO — Auth (`tests/integration/auth/auth-services.test.ts`, 13 testes; `tests/integration/auth/mfa.test.ts`, segundo fator ponta a ponta)
 - ✅ CONCLUÍDO — RBAC (`tests/integration/access/access-control.test.ts`: provisionamento, união de perfis, perfil sem permissão, vínculo e empresa suspensos)
 - ✅ CONCLUÍDO — Multi-tenancy (nível banco + empresa ativa, pessoa multiempresa, seleção de empresa sem vínculo e consultas sem vazamento entre empresas)
-- 🔴 NÃO IMPLEMENTADO — Documentos (apenas constraints da tabela)
-- 🔴 NÃO IMPLEMENTADO — Storage
+- ✅ CONCLUÍDO — Documentos (`tests/integration/documents/`: metadados, categorias, etiquetas, vencimentos e arquivos)
+- ✅ CONCLUÍDO — Storage (`tests/integration/documents/document-files.test.ts`, contra MinIO real: envio direto, conferência, recusa com remoção, política assinada, isolamento e CHECK da chave)
 - 🔴 NÃO IMPLEMENTADO — Billing
 
 ## 16.3 E2E
@@ -1163,14 +1164,14 @@ Registrar, quando aplicável:
 - 🔴 NÃO IMPLEMENTADO — Trial
 - 🔴 NÃO IMPLEMENTADO — Expiração
 - 🔴 NÃO IMPLEMENTADO — Assinatura
-- 🔴 NÃO IMPLEMENTADO — Acesso a documentos
+- ✅ CONCLUÍDO — Acesso a documentos (`tests/e2e/documents.spec.ts`, `documents-ui.spec.ts` e `document-files.spec.ts`: metadados, arquivos, download por URL assinada e isolamento entre empresas)
 
 ## 16.4 Segurança
 
 - ✅ CONCLUÍDO — Cross-tenant (banco, autorização com PostgreSQL e E2E das rotas)
 - 🟡 PARCIAL — BOLA/IDOR (rotas de membros: outra empresa, inexistente e id inválido → 404; demais recursos nas fases seguintes)
-- 🔴 NÃO IMPLEMENTADO — Upload
-- 🔴 NÃO IMPLEMENTADO — Storage
+- 🟡 PARCIAL — Upload (tipo fora da allowlist, tamanho acima do limite, extensão trocada, conteúdo disfarçado e troca do tipo na política assinada — `tests/e2e/document-files.spec.ts` e integração; antivírus pendente)
+- ✅ CONCLUÍDO — Storage (outra empresa → 404 em listar, baixar e remover; adaptador recusa chave de outra empresa; CHECK no banco)
 - 🟡 PARCIAL — Sessão (hash do token, fixation, expiração, renovação, revogação; falta teste de sequestro/reuso em navegador)
 - ✅ CONCLUÍDO — Rate limit (bloqueio por conta e contagem concorrente)
 - 🟡 PARCIAL — API (origem, `Content-Type`, tamanho do corpo, respostas padronizadas, headers de segurança e limite por IP nas rotas de negócio)
@@ -1384,7 +1385,7 @@ As recomendações devem ser:
   - Evidência: `GET/POST /api/documents` e `GET/PATCH/DELETE /api/documents/[documentId]` com `documents.read/create/update/delete`; `src/application/documents/manage-documents.ts`; `docs/api/documentos.md`; auditoria `document.created/updated/deleted`.
   - Testes: `tests/unit/application/documents/manage-documents.test.ts`, `tests/integration/documents/documents.test.ts` e `tests/e2e/documents.spec.ts` — passaram (local, 2026-09-11).
   - Tela: `/documentos` — lista com busca, filtros, ordenação e paginação; criar, editar e excluir em formulário; `tests/e2e/documents-ui.spec.ts` — passou.
-  - Pendente: o arquivo em si (FASE 5).
+  - Arquivos: FASE 5 (`docs/api/arquivos.md`).
 - ✅ CONCLUÍDO — Categorias (árvore de até 3 níveis)
   - Evidência: `GET/POST /api/categories` e `GET/PATCH/DELETE /api/categories/[categoryId]` (`categories.read`/`categories.manage`); nome único entre irmãs, sem ciclo, exclusão lógica que recusa categoria em uso; caminho completo em cada resposta (DEC-032).
   - Tela: `/categorias` — árvore com recuo por nível, contagem de documentos e formulário de categoria superior.
@@ -1410,11 +1411,18 @@ As recomendações devem ser:
 
 ## FASE 5 — Storage e upload seguro
 
-- [ ] Storage privado
-- [ ] Signed URLs
-- [ ] Validação de arquivos
-- [ ] Antivírus
-- [ ] Logs
+**Status da fase:** 🟡 PARCIAL. Storage privado, envio direto com conferência, download por URL assinada e auditoria estão prontos; falta o antivírus (DEC-035).
+
+- ✅ CONCLUÍDO — Storage privado
+  - Evidência: Railway Storage Buckets em produção; MinIO fixado (`quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z`) no docker-compose e no CI; adaptador `src/infrastructure/storage/s3-storage-provider.ts`; tabela `document_files`.
+- ✅ CONCLUÍDO — Signed URLs
+  - Evidência: formulário assinado de envio (10 min, com chave, tipo e tamanho máximo na política) e URL de download (5 min, `attachment`); CSP libera só a origem do bucket.
+- ✅ CONCLUÍDO — Validação de arquivos
+  - Evidência: allowlist, extensão × tipo, 25 MB, tamanho recebido × declarado e assinatura do conteúdo lida no bucket (`src/domain/documents/file-policy.ts`, `src/application/documents/manage-document-files.ts`).
+- 🔴 NÃO IMPLEMENTADO — Antivírus (DEC-035)
+- ✅ CONCLUÍDO — Logs
+  - Evidência: auditoria de envio, recusa (com motivo), download e remoção.
+- Testes: `tests/unit/domain/documents/file-policy.test.ts`, `tests/unit/application/documents/manage-document-files.test.ts`, `tests/unit/infrastructure/storage/storage.test.ts`, `tests/integration/documents/document-files.test.ts` e `tests/e2e/document-files.spec.ts` — passaram (local, 2026-09-11).
 
 ## FASE 6 — Auditoria e versionamento
 
@@ -1561,7 +1569,7 @@ Motivo: banco relacional maduro e adequado ao domínio empresarial.
 
 ## DEC-004 — Storage privado
 
-**Status:** ✅ DECIDIDO
+**Status:** ✅ CONCLUÍDO (implementado na FASE 5 — DEC-035)
 
 Motivo: os documentos são um ativo crítico do sistema.
 
@@ -1881,19 +1889,41 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 ---
 
+## DEC-035 — Arquivos no Railway Storage Buckets, com envio direto e conferência
+
+**Status:** 🟡 PARCIAL (implementado na FASE 5; antivírus pendente)
+
+**Decisão (usuário, 2026-09-11: "manter tudo em um só lugar"):** os arquivos ficam num **Railway Storage Bucket** — S3 compatível, privado, criptografado em repouso, sem cobrança de saída de dados nem de operações. O volume do Railway foi descartado: prende o arquivo a um serviço, impede deploy sem interrupção e não oferece URL assinada.
+
+**Envio direto ao bucket, conferência no servidor:** o servidor confere o que o navegador declarou e emite um formulário assinado cuja política fixa chave, tipo e tamanho máximo; o navegador envia o arquivo direto ao bucket; o servidor então lê no bucket o tamanho e o primeiro 1 KB e só libera o que confere. O que não confere é apagado. Motivo: o `proxy` do Next.js 16 guarda o corpo da requisição em memória (10 MB por padrão), e não há razão para o servidor carregar arquivos de até 25 MB.
+
+**Download:** a rota autoriza e responde `302` para uma URL assinada de 5 minutos, com `Content-Disposition: attachment`; o arquivo nunca passa pelo servidor e cada download fica na auditoria.
+
+**Nada é apagado automaticamente:** o bucket não tem versionamento, então apagar é irreversível. Remover um arquivo tira ele do documento e mantém o objeto; a exceção é o conteúdo recusado na conferência, que nunca ficou disponível.
+
+**Isolamento:** chave `companies/{empresa}/documents/{documento}/files/{arquivo}` feita só de ids; o adaptador confere o prefixo da empresa antes de cada operação e um CHECK no banco exige que a chave bata com os ids da própria linha.
+
+**Antivírus — pendente:** não há varredura. Até ela existir, a proteção é: formatos de documento digitalizado apenas (sem executáveis, compactados ou formatos com macros), assinatura do conteúdo conferida, limite de tamanho e envio só por membros autenticados da empresa. A varredura é **obrigatória antes do portal de terceiros** (FASE 10), quando pessoas de fora passam a enviar arquivos. A escolha da ferramenta é do usuário, porque tem custo mensal (ClamAV como serviço no Railway ocupa memória continuamente).
+
+**Desenvolvimento e CI:** MinIO fixado em `quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z` — o MinIO parou de publicar imagens no Docker Hub. Um bucket próprio para os testes de integração, que só aceitam nome terminado em `-test`.
+
+**Evidência:** `src/domain/documents/file-policy.ts`, `src/application/documents/manage-document-files.ts`, `src/infrastructure/storage/`, migração `document_files`; `tests/integration/documents/document-files.test.ts` (contra MinIO real) e `tests/e2e/document-files.spec.ts` — passaram.
+
+---
+
 # 24. STATUS GERAL
 
 **Produto:** ✅ CONCLUÍDO (definição e identidade visual; vetores da logo pendentes)
 **Arquitetura:** ✅ CONCLUÍDO (monólito modular em camadas; entitlements por empresa na cadeia de autorização)
 **Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit, CSRF, empresa ativa, RBAC, MFA para OWNER/ADMIN, CSP com nonce, HSTS e logs estruturados; verificação de e-mail e recuperação de senha no backlog)
 **Frontend:** 🟡 PARCIAL (Tailwind CSS com a paleta oficial; telas de cadastro, login, segundo fator, Builder, convite, painel, documentos, categorias e vencimentos, com cabeçalho e navegação comuns)
-**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial, entitlements por empresa, API do Builder com início do trial e troca de módulos durante o trial, gestão de membros com convites; núcleo documental com categorias, etiquetas, busca e filtros; módulo Controle de vencimentos; painel da empresa — sem arquivo e sem os demais módulos de negócio)
-**Banco:** 🟡 PARCIAL (identidade, empresa, acesso, documentos com texto de busca e etiquetas, auditoria, catálogo comercial com preços e kits, módulos por empresa e assinatura com prazos de retenção)
-**Storage:** 🔴 NÃO IMPLEMENTADO
+**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial, entitlements por empresa, API do Builder com início do trial e troca de módulos durante o trial, gestão de membros com convites; núcleo documental com categorias, etiquetas, busca e filtros; módulo Controle de vencimentos; painel da empresa; arquivos em storage privado — sem os demais módulos de negócio)
+**Banco:** 🟡 PARCIAL (identidade, empresa, acesso, documentos com texto de busca, etiquetas e arquivos, auditoria, catálogo comercial com preços e kits, módulos por empresa e assinatura com prazos de retenção)
+**Storage:** 🟡 PARCIAL (Railway Storage Buckets privado; envio direto e download por URL assinada; conteúdo conferido; antivírus pendente)
 **Billing:** 🔴 NÃO IMPLEMENTADO
 **WhatsApp:** 🔴 NÃO IMPLEMENTADO
 **IA:** 🔴 NÃO IMPLEMENTADO
-**Testes:** 🟡 PARCIAL (372 unitários, 135 integração, 34 E2E; CI bloqueando o deploy)
+**Testes:** 🟡 PARCIAL (41 arquivos, 501 unitários, 16 arquivos, 186 integração, 59 E2E; integração e E2E com PostgreSQL e storage S3 reais; CI bloqueando o deploy)
 
 ## Bloqueadores
 
@@ -2582,3 +2612,37 @@ Verificação em produção: após o merge e o deploy. A migração só insere d
 | `pnpm build` | ✅ |
 
 Verificação em produção: após o merge e o deploy. Sem migração.
+
+---
+
+## 2026-09-11 — FASE 5: storage privado e arquivos dos documentos
+
+### O que foi feito
+
+| Item | Evidência |
+|---|---|
+| Storage | Railway Storage Buckets em produção (escolha do usuário: tudo num lugar só); MinIO fixado no docker-compose e no CI (DEC-035) |
+| Envio | `POST /api/documents/[id]/files` emite formulário assinado (chave, tipo e tamanho na política); o navegador envia direto ao bucket; `POST …/files/[fileId]/complete` confere tamanho e assinatura do conteúdo e libera ou recusa |
+| Download | `GET …/files/[fileId]/download`: autorização e `302` para URL assinada de 5 minutos, auditado |
+| Remoção | `DELETE …/files/[fileId]`: tira do documento e mantém o objeto (o bucket não tem versionamento) |
+| Política | PDF, JPEG, PNG e WebP; extensão × tipo; 25 MB; nome higienizado; chave só com ids e prefixo da empresa |
+| Banco | migração `document_files` com CHECKs de chave × ids da linha, tipo, tamanho e coerência de situação |
+| Segurança | CSP libera só a origem do bucket; variáveis de storage validadas (https fora de development, senha local recusada) |
+| Tela | seção "Arquivos" no formulário do documento: anexar, conferir, baixar e remover |
+| Documentação | `docs/api/arquivos.md`, modelo de dados, telas, DEC-035 |
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm lint` / `tsc --noEmit` | ✅ sem erros |
+| `pnpm test` | ✅ 41 arquivos, 501 testes (novos: allowlist, magic bytes, nome higienizado, chave do objeto, casos de uso do envio com storage falso, configuração e CSP do storage) |
+| `pnpm test:integration` | ✅ 16 arquivos, 186 testes (novos, contra MinIO real: envio direto e download, conteúdo disfarçado recusado e apagado, política assinada, conclusão antes do envio, remoção sem apagar, isolamento, CHECK da chave) |
+| `pnpm test:e2e` | ✅ 59 testes (novos: fluxo completo pela API, recusas, sessão, origem e outra empresa; no navegador, anexar, baixar e remover, e o motivo da recusa) |
+| `pnpm build` | ✅ |
+
+### Observações
+
+- Antivírus pendente, obrigatório antes do portal de terceiros; a ferramenta depende de decisão do usuário por ter custo mensal.
+- O MinIO deixou de publicar imagens no Docker Hub: as versões fixadas vêm do quay.io.
+- Limpeza de envios não concluídos e retenção de objetos removidos ficam para quando houver volume.

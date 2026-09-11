@@ -10,16 +10,25 @@ export interface SecurityHeaderOptions {
   readonly isDevelopment: boolean;
   /** HSTS só faz sentido quando a aplicação é servida por HTTPS. */
   readonly isHttps: boolean;
+  /**
+   * Origens externas com que o navegador pode falar além da própria aplicação.
+   * Hoje só o bucket de storage, para o envio direto de arquivos (FASE 5).
+   */
+  readonly connectSources?: readonly string[];
 }
 
-export function buildContentSecurityPolicy({ nonce, isDevelopment }: SecurityHeaderOptions): string {
+export function buildContentSecurityPolicy({
+  nonce,
+  isDevelopment,
+  connectSources = [],
+}: SecurityHeaderOptions): string {
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDevelopment ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self'",
-    "connect-src 'self'",
+    ["connect-src 'self'", ...connectSources].join(" "),
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

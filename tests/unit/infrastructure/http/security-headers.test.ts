@@ -34,6 +34,15 @@ describe("Content-Security-Policy", () => {
     expect(csp["form-action"]).toBe("'self'");
   });
 
+  it("libera para conexões só a própria aplicação e, quando configurado, o bucket de arquivos", () => {
+    expect(directives(buildContentSecurityPolicy(production))["connect-src"]).toBe("'self'");
+    expect(
+      directives(buildContentSecurityPolicy({ ...production, connectSources: ["https://veldocs.storage.example"] }))[
+        "connect-src"
+      ],
+    ).toBe("'self' https://veldocs.storage.example");
+  });
+
   it("permite eval apenas em desenvolvimento (usado pelo React)", () => {
     expect(buildContentSecurityPolicy({ ...production, isDevelopment: true })).toContain("'unsafe-eval'");
   });

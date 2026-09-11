@@ -100,6 +100,7 @@ export default async function DocumentsPage({
       },
       expirations,
       initialFilters,
+      filesEnabled: services.documentFiles.isEnabled(),
     }),
   ) as DocumentsData;
 
