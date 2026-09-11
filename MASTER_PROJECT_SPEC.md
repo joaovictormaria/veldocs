@@ -583,11 +583,12 @@ Nunca permitir acesso cruzado.
 - ✅ CONCLUÍDO — Todo recurso empresarial possui vínculo de tenant.
   - Evidência: `company_id NOT NULL` em `branches`, `departments`, `memberships`, `roles`, `user_roles`, `document_categories`, `documents`; `users` é a pessoa global e acessa empresas por `memberships` (DEC-009).
   - Teste: `tests/integration/database/connection-and-migrations.test.ts` — passou (local e CI, 2026-09-11).
-- 🟡 PARCIAL — Toda leitura valida tenant: as rotas de negócio existentes (`/api/company`, `/api/company/members`, `/api/company/members/[userId]`) usam só a empresa ativa da sessão, com vínculo e empresa ativos. Cada rota nova deve usar `authorizeRequest`.
-  - Testes: `tests/integration/access/access-control.test.ts` e `tests/e2e/access.spec.ts` — passaram (local, 2026-09-11).
-- 🟡 PARCIAL — Toda escrita valida tenant: o banco rejeita vínculos entre empresas por FKs compostas, inclusive pessoa que não é membro (DEC-010); validação nas rotas de negócio pendente.
-  - Teste: `tests/integration/database/tenant-isolation-constraints.test.ts` (17 testes) — passou.
-- 🔴 NÃO IMPLEMENTADO — Toda exclusão valida tenant.
+- 🟡 PARCIAL — Toda leitura valida tenant: as rotas de negócio existentes (`/api/company`, `/api/company/members`, `/api/company/members/[userId]`, `/api/company/branches*`, `/api/company/departments*`) usam só a empresa ativa da sessão, com vínculo e empresa ativos. Cada rota nova deve usar `authorizeRequest`.
+  - Testes: `tests/integration/access/access-control.test.ts`, `company-management.test.ts` e `tests/e2e/*.spec.ts` — passaram (local, 2026-09-11).
+- 🟡 PARCIAL — Toda escrita valida tenant: o banco rejeita vínculos entre empresas por FKs compostas, inclusive pessoa que não é membro (DEC-010); nas rotas, a empresa vem sempre do `AuthorizedContext` e o `companyId` entra em toda cláusula `where` (empresa, filiais e setores). Rotas dos demais recursos ainda não existem.
+  - Testes: `tests/integration/database/tenant-isolation-constraints.test.ts` (17 testes) e `tests/integration/access/company-management.test.ts` — passaram.
+- 🟡 PARCIAL — Toda exclusão valida tenant: filiais e setores só são excluídos dentro da empresa da sessão (id de outra empresa responde 404) e a exclusão é lógica, recusando registro ainda em uso.
+  - Testes: `tests/integration/access/company-management.test.ts` e `tests/e2e/company-management.spec.ts` — passaram.
 - 🔴 NÃO IMPLEMENTADO — Storage possui isolamento lógico por tenant (o contrato `StorageProvider` já exige `companyId`).
 - ✅ CONCLUÍDO — Testes de cross-tenant existem: nível banco (17 testes), autorização e consultas com PostgreSQL (IDOR, empresa sem vínculo, vínculo e empresa suspensos) e E2E das rotas (membro de outra empresa → 404; seleção de empresa alheia → 404) — passaram. Estender a cada novo recurso.
 - 🔴 NÃO IMPLEMENTADO — Entitlements são associados ao tenant (FASE 3).
@@ -665,8 +666,8 @@ Referências principais:
 ## 7.6 API
 
 - ✅ CONCLUÍDO — Rate limiting: cadastro, login, segundo fator e rotas de negócio (120/min por IP, resposta 429 com `Retry-After`); implementação em PostgreSQL (DEC-016). Testes unitários e de integração — passaram.
-- 🟡 PARCIAL — Input validation (Zod nas rotas de autenticação; `Content-Type: application/json` obrigatório e corpo limitado a 16 KB — unit + E2E — passaram)
-- 🟡 PARCIAL — Proteção BOLA/IDOR: `GET /api/company/members/[userId]` busca sempre por `(empresa da sessão, pessoa)` e responde 404 para outra empresa, inexistente ou id inválido (integração + E2E — passaram); aplicar a cada novo recurso.
+- 🟡 PARCIAL — Input validation (Zod nas rotas de autenticação e de gestão da empresa, com erros por campo em `issues`; `Content-Type: application/json` obrigatório e corpo limitado a 16 KB — unit + E2E — passaram)
+- 🟡 PARCIAL — Proteção BOLA/IDOR: rotas por id (`members/[userId]`, `branches/[branchId]`, `departments/[departmentId]`) buscam sempre por `(empresa da sessão, recurso)` e respondem 404 para outra empresa, inexistente ou id inválido (integração + E2E — passaram); aplicar a cada novo recurso.
 - 🟡 PARCIAL — Proteção de função: cada rota exige sua permissão (perfil sem permissão → 403); funções administrativas ainda não existem.
 - 🟡 PARCIAL — Limites de recursos (corpo de 16 KB; timeout no health check; limites por plano pendentes)
 - [ ] Proteção contra SSRF quando aplicável (não há chamadas externas a partir de entrada do usuário)
@@ -1280,11 +1281,15 @@ As recomendações devem ser:
 
 ## FASE 3 — Empresa, usuários e módulos comerciais
 
-**Status da fase:** 🔴 NÃO IMPLEMENTADO (há apenas entidades-base de empresa e acesso). Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
+**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada; a segunda (catálogo comercial, Builder, preços e trial) depende de decisões do usuário. Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
 
-- 🟡 PARCIAL — Empresas (entidade e criação no cadastro)
-- 🟡 PARCIAL — Filiais (entidade)
-- 🟡 PARCIAL — Setores (entidade)
+- ✅ CONCLUÍDO — Empresas (entidade, criação no cadastro e edição dos dados cadastrais com CNPJ validado)
+  - Evidência: `PATCH /api/company` (`company.update`), `src/application/access/manage-company.ts`, `src/domain/company/cnpj.ts`; auditoria `company.updated`.
+  - Testes: unit (`manage-company.test.ts`, `cnpj.test.ts`), integração (`company-management.test.ts`) e E2E (`company-management.spec.ts`) — passaram (local, 2026-09-11).
+- ✅ CONCLUÍDO — Filiais (entidade e gestão completa)
+  - Evidência: `GET/POST /api/company/branches` e `GET/PATCH/DELETE /api/company/branches/[branchId]` (`branches.read` / `branches.manage`); código único por empresa, exclusão lógica que recusa filial em uso e libera o código (DEC-021); auditoria `branch.created/updated/deleted`.
+- ✅ CONCLUÍDO — Setores (entidade e gestão completa)
+  - Evidência: `GET/POST /api/company/departments` e `GET/PATCH/DELETE /api/company/departments/[departmentId]` (`departments.read` / `departments.manage`); setor da empresa inteira ou de uma filial, sempre da mesma empresa; auditoria `department.created/updated/deleted`.
 - 🟡 PARCIAL — Usuários (pessoa global e vínculos; convites pendentes)
 - 🟡 PARCIAL — Roles (5 perfis padrão por empresa)
 - 🟡 PARCIAL — Permissions (catálogo de 18 permissões)
@@ -1570,19 +1575,33 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 ---
 
+## DEC-021 — Exclusão lógica com liberação do código da filial
+
+**Status:** ✅ CONCLUÍDO (implementado na FASE 3)
+
+**Decisão:** filiais e setores são excluídos logicamente (`deleted_at`), a exclusão é recusada enquanto houver vínculos ativos (setores ou documentos não excluídos) e, ao excluir uma filial, seu `code` é apagado.
+
+**Motivo:** `branches(company_id, code)` é único e não distingue linha excluída; sem liberar o código, um código usado uma vez ficaria bloqueado para sempre na empresa. Pelo mesmo motivo o `ON DELETE RESTRICT` do banco não protege exclusões lógicas — os vínculos são conferidos em transação antes de marcar a exclusão.
+
+**Consequência:** o histórico e a auditoria continuam apontando para a filial excluída, mas ela não aparece em listagens nem pode receber novos setores.
+
+**Evidência:** `src/infrastructure/database/prisma-company-management-repository.ts`; `tests/integration/access/company-management.test.ts` (reuso do código, filial com setor/documento ativo, vínculo já excluído) — passaram.
+
+---
+
 # 24. STATUS GERAL
 
 **Produto:** ✅ CONCLUÍDO (definição e identidade visual; vetores da logo pendentes)
 **Arquitetura:** ✅ CONCLUÍDO (monólito modular em camadas; entitlements ainda não existem)
 **Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit, CSRF, empresa ativa, RBAC, MFA para OWNER/ADMIN, CSP com nonce, HSTS e logs estruturados; verificação de e-mail e recuperação de senha no backlog)
 **Frontend:** 🔴 NÃO IMPLEMENTADO (somente página inicial da fundação)
-**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização e consultas da empresa e dos membros; sem módulos de negócio)
+**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; sem módulos de negócio)
 **Banco:** 🟡 PARCIAL (entidades de identidade, empresa, acesso, documentos e auditoria; faltam Module, ModulePrice, Entitlement, Subscription e Trial)
 **Storage:** 🔴 NÃO IMPLEMENTADO
 **Billing:** 🔴 NÃO IMPLEMENTADO
 **WhatsApp:** 🔴 NÃO IMPLEMENTADO
 **IA:** 🔴 NÃO IMPLEMENTADO
-**Testes:** 🟡 PARCIAL (256 unitários, 74 integração, 17 E2E; CI bloqueando o deploy)
+**Testes:** 🟡 PARCIAL (281 unitários, 90 integração, 23 E2E; CI bloqueando o deploy)
 
 ## Bloqueadores
 
@@ -1772,3 +1791,37 @@ Verificação em produção: após o merge e o deploy.
 
 - O limite de 120 req/min é por IP. Atrás do proxy do Railway o IP vem do último valor de `X-Forwarded-For`.
 - Um ajuste foi necessário no helper de limite: ele lia a configuração de ambiente para obter o logger, o que quebrava testes unitários; o logger passou a ser injetável.
+
+---
+
+## 2026-09-11 — FASE 3 (primeira metade): empresa, filiais e setores
+
+### O que foi feito
+
+| Item | Evidência |
+|---|---|
+| Dados da empresa | `PATCH /api/company` (`company.update`): nome, razão social e CNPJ; `CompanySummary` passou a expor `taxId` |
+| CNPJ | `src/domain/company/cnpj.ts`: validação dos dois dígitos verificadores, recusa de sequências repetidas, aceita com ou sem máscara e grava somente dígitos |
+| Filiais | `GET/POST /api/company/branches`, `GET/PATCH/DELETE /api/company/branches/[branchId]` (`branches.read` / `branches.manage`) |
+| Setores | `GET/POST /api/company/departments`, `GET/PATCH/DELETE /api/company/departments/[departmentId]` (`departments.read` / `departments.manage`); setor da empresa inteira (sem filial) ou de uma filial da mesma empresa |
+| Escopo por empresa | `src/application/access/manage-company.ts` só aceita `AuthorizedContext`; o repositório recebe sempre `context.companyId` e todo `where` o inclui |
+| Exclusão | Lógica, recusada enquanto houver setores ou documentos ativos (HTTP 409 `resource_in_use`); o código da filial é liberado para reuso (DEC-021) |
+| Rotas de escrita | `src/infrastructure/http/write-route.ts`: origem (CSRF) → limite por IP (30/min, mais restrito que leitura) → autorização → corpo JSON, com erros de validação por campo em `issues` |
+| Auditoria | `company.updated`, `branch.created/updated/deleted`, `department.created/updated/deleted`; tentativa recusada não gera evento |
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm lint` / `tsc --noEmit` | ✅ sem erros |
+| `pnpm test` | ✅ 23 arquivos, 281 testes (novos: CNPJ, casos de uso da gestão com repositório em memória) |
+| `pnpm test:integration` | ✅ 7 arquivos, 90 testes (novos: código duplicado, reuso após exclusão, filial/setor em uso, filial de outra empresa, auditoria gravada) |
+| `pnpm test:e2e` | ✅ 23 testes (novos: edição da empresa, CNPJ inválido → 400 com campo, ciclo filial+setor, isolamento entre empresas, origem obrigatória, ids inválidos → 404) |
+
+Verificação em produção: após o merge e o deploy.
+
+### Observações
+
+- Os ajudantes de sessão do E2E (`signup`, `enrollMfa`) foram extraídos para `tests/e2e/support/session.ts` e são usados pelas duas specs.
+- A segunda metade da FASE 3 (catálogo de módulos, preços, dependências, kits, trial de 14 dias e Builder) continua bloqueada por decisões comerciais do usuário.
+- Gestão de membros, convites e atribuição de perfis ainda não foi feita: é o próximo passo dentro desta metade.

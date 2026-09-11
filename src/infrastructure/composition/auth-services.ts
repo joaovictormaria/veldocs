@@ -1,6 +1,7 @@
 import "server-only";
 import { createAuthorizer } from "@/application/access/authorize";
 import { createCompanyQueries } from "@/application/access/company-queries";
+import { createCompanyManagement } from "@/application/access/manage-company";
 import { createSelectActiveCompany } from "@/application/access/select-active-company";
 import { createLoginUseCase } from "@/application/auth/login";
 import { createMfaUseCases } from "@/application/auth/mfa";
@@ -15,6 +16,7 @@ import {
   createPrismaCompanyDirectory,
 } from "@/infrastructure/database/prisma-access-control-repository";
 import { createPrismaAuditLogger } from "@/infrastructure/database/prisma-audit-logger";
+import { createPrismaCompanyManagementRepository } from "@/infrastructure/database/prisma-company-management-repository";
 import { createPrismaMfaRepository } from "@/infrastructure/database/prisma-mfa-repository";
 import { getPrismaClient } from "@/infrastructure/database/prisma-client";
 import { createPrismaIdentityRepository } from "@/infrastructure/database/prisma-identity-repository";
@@ -64,6 +66,11 @@ export function buildAuthServices(prisma: PrismaClient, keys: ApplicationKeys, n
     }),
     selectActiveCompany: createSelectActiveCompany({ sessions, identity, access, audit }),
     company: createCompanyQueries(createPrismaCompanyDirectory(prisma)),
+    companyManagement: createCompanyManagement({
+      repository: createPrismaCompanyManagementRepository(prisma),
+      audit,
+      now,
+    }),
     rateLimiter: dependencies.rateLimiter,
     mfa: createMfaUseCases({ ...dependencies, mfa, service: createMfaService() }),
   };
