@@ -299,11 +299,13 @@ Auditado em 2026-09-11 (detalhes e evidências na seção 25 do `MASTER_PROJECT_
 
 - **FASE 0 — Produto e posicionamento:** concluída, incluindo a identidade visual ([`docs/brand/identidade-visual.md`](./docs/brand/identidade-visual.md)).
 - **FASE 1 — Fundação técnica:** concluída.
-- **FASE 2 — Segurança base:** parcial. Prontos: pessoa com vínculos multiempresa, cadastro, login por e-mail ou CPF + senha, sessão segura, limites de tentativa, auditoria, empresa ativa, permissões (RBAC) nas rotas e segundo fator obrigatório para OWNER/ADMIN. Pendentes: verificação de e-mail, recuperação de senha, link mágico, Google, CSP/HSTS e logs.
+- **FASE 2 — Segurança base:** quase concluída. Prontos: pessoa com vínculos multiempresa, cadastro, login por e-mail ou CPF + senha, sessão segura, limites de tentativa, auditoria, empresa ativa, permissões (RBAC) nas rotas, segundo fator obrigatório para OWNER/ADMIN, headers de segurança (CSP com nonce e HSTS), logs estruturados e limite por IP. Pendentes: verificação de e-mail, recuperação de senha, link mágico e login com Google (backlog).
 - **FASE 3 — Empresa + módulos comerciais:** não iniciada (catálogo de módulos, entitlements, Builder, preço e trial ainda não existem).
 - **CI/CD:** GitHub Actions (lint, tipos, testes unitários, integração, build e E2E) e deploy no Railway somente com CI verde.
 
 Produção: https://veldocs-app-production.up.railway.app
+
+Backlog (adiado, ver seção 26 do `MASTER_PROJECT_SPEC.md`): e-mail transacional (Resend), login com Google e cópia das chaves/backup do banco.
 
 > A estrutura real do código é um único app Next.js em camadas (`src/app`, `src/presentation`, `src/application`, `src/domain`, `src/infrastructure`), com `prisma/` e `tests/`, e não pastas `frontend/` e `backend/` separadas. Ver [`docs/architecture/fundacao-tecnica.md`](./docs/architecture/fundacao-tecnica.md).
 

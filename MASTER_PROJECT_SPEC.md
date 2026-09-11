@@ -664,7 +664,7 @@ Referências principais:
 
 ## 7.6 API
 
-- 🟡 PARCIAL — Rate limiting (rotas de autenticação)
+- ✅ CONCLUÍDO — Rate limiting: cadastro, login, segundo fator e rotas de negócio (120/min por IP, resposta 429 com `Retry-After`); implementação em PostgreSQL (DEC-016). Testes unitários e de integração — passaram.
 - 🟡 PARCIAL — Input validation (Zod nas rotas de autenticação; `Content-Type: application/json` obrigatório e corpo limitado a 16 KB — unit + E2E — passaram)
 - 🟡 PARCIAL — Proteção BOLA/IDOR: `GET /api/company/members/[userId]` busca sempre por `(empresa da sessão, pessoa)` e responde 404 para outra empresa, inexistente ou id inválido (integração + E2E — passaram); aplicar a cada novo recurso.
 - 🟡 PARCIAL — Proteção de função: cada rota exige sua permissão (perfil sem permissão → 403); funções administrativas ainda não existem.
@@ -1080,7 +1080,7 @@ Registrar, quando aplicável:
 
 ## 16.1 Unitários
 
-> Suíte atual: 18 arquivos, 232 testes — passaram (local, 2026-09-11).
+> Suíte atual: 21 arquivos, 256 testes — passaram (local, 2026-09-11).
 
 - 🟡 PARCIAL — Regras de negócio (identidade: CPF, e-mail, senha, identificador de login; catálogo de perfis; gestor de sessão; login e cadastro; ambiente; health check; fronteiras de arquitetura)
 - 🔴 NÃO IMPLEMENTADO — Cálculo de preço modular
@@ -1102,7 +1102,7 @@ Registrar, quando aplicável:
 
 ## 16.3 E2E
 
-> Suíte atual: 15 testes Playwright — passaram (local; CI roda contra `pnpm start`).
+> Suíte atual: 17 testes Playwright — passaram (local; CI roda contra `pnpm start`).
 
 - ✅ CONCLUÍDO — Cadastro (`tests/e2e/auth.spec.ts`: cookie HttpOnly/SameSite, sessão, login por CPF, logout, credenciais inválidas, origem e JSON obrigatórios)
 - 🔴 NÃO IMPLEMENTADO — Builder
@@ -1121,7 +1121,7 @@ Registrar, quando aplicável:
 - 🔴 NÃO IMPLEMENTADO — Storage
 - 🟡 PARCIAL — Sessão (hash do token, fixation, expiração, renovação, revogação; falta teste de sequestro/reuso em navegador)
 - ✅ CONCLUÍDO — Rate limit (bloqueio por conta e contagem concorrente)
-- 🟡 PARCIAL — API (origem, `Content-Type`, tamanho do corpo e respostas genéricas; 401/403/404 padronizados nas rotas de negócio)
+- 🟡 PARCIAL — API (origem, `Content-Type`, tamanho do corpo, respostas padronizadas, headers de segurança e limite por IP nas rotas de negócio)
 - 🔴 NÃO IMPLEMENTADO — WhatsApp
 - 🔴 NÃO IMPLEMENTADO — IA/prompt injection
 
@@ -1188,9 +1188,9 @@ As recomendações devem ser:
 
 # 19. OBSERVABILIDADE
 
-> Existe apenas `GET /api/health` (banco e migrações), usado como healthcheck do Railway. Nenhum item abaixo está implementado.
+> Existem `GET /api/health` (banco e migrações, usado como healthcheck do Railway) e logs estruturados em JSON com `requestId`. Coleta centralizada, métricas e tracing: FASE 18.
 
-- [ ] Logs centralizados
+- 🟡 PARCIAL — Logs centralizados (logs estruturados em JSON na saída padrão, com redação de campos sensíveis; falta coleta/retenção centralizada)
 - [ ] Métricas
 - [ ] Tracing
 - [ ] Error tracking
@@ -1267,14 +1267,14 @@ As recomendações devem ser:
 
 ## FASE 2 — Segurança base
 
-**Status da fase:** 🟡 PARCIAL — parte 1 (identidade multiempresa, cadastro, login e sessão), parte 2 (empresa ativa e autorização nas rotas) e parte 3 (segundo fator obrigatório para OWNER/ADMIN) implementadas em 2026-09-11. Pendentes: verificação de e-mail, recuperação de senha, link mágico, Google, CSP/HSTS, logs estruturados e rate limiting nas rotas de negócio.
+**Status da fase:** 🟡 PARCIAL — partes 1 a 4 implementadas em 2026-09-11: identidade multiempresa com cadastro, login e sessão; empresa ativa e autorização nas rotas; segundo fator obrigatório para OWNER/ADMIN; headers de segurança, logs estruturados e limite nas rotas de negócio. Pendentes: verificação de e-mail, recuperação de senha, link mágico e login com Google — todos no backlog (seção 26).
 
 - 🟡 PARCIAL — Autenticação (ver 7.1)
 - ✅ CONCLUÍDO — Sessão (ver 7.2)
 - 🟡 PARCIAL — Multi-tenancy (empresa ativa e filtro por empresa nas rotas existentes; ver 6.2)
 - ✅ CONCLUÍDO — RBAC (mecanismo de autorização aplicado a todas as rotas de negócio existentes; ver 7.3)
-- 🟡 PARCIAL — Rate limiting (autenticação)
-- 🟡 PARCIAL — Headers (`X-Powered-By` removido e HTTP → HTTPS 301 em produção; CSP com nonce e HSTS pendentes)
+- ✅ CONCLUÍDO — Rate limiting (cadastro, login, segundo fator e rotas de negócio)
+- ✅ CONCLUÍDO — Headers: CSP com nonce por requisição, HSTS em HTTPS, `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy` e isolamento de origem, aplicados pelo `src/proxy.ts`; `X-Powered-By` removido. Testes unitários e E2E (inclusive o nonce nos scripts da página) — passaram.
 - ✅ CONCLUÍDO — Secrets (variáveis validadas; `.env*` fora do Git; `APP_ENCRYPTION_KEY`/`APP_HMAC_KEY` configuradas no Railway sem exibição; rotação de chaves pendente)
 - ✅ CONCLUÍDO — Auditoria básica (`audit_logs` append-only e eventos de autenticação)
 
@@ -1574,7 +1574,7 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 **Produto:** ✅ CONCLUÍDO (definição e identidade visual; vetores da logo pendentes)
 **Arquitetura:** ✅ CONCLUÍDO (monólito modular em camadas; entitlements ainda não existem)
-**Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit, CSRF, empresa ativa, RBAC nas rotas e MFA obrigatório para OWNER/ADMIN; CSP/HSTS, logs e verificação de e-mail pendentes)
+**Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit, CSRF, empresa ativa, RBAC, MFA para OWNER/ADMIN, CSP com nonce, HSTS e logs estruturados; verificação de e-mail e recuperação de senha no backlog)
 **Frontend:** 🔴 NÃO IMPLEMENTADO (somente página inicial da fundação)
 **Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização e consultas da empresa e dos membros; sem módulos de negócio)
 **Banco:** 🟡 PARCIAL (entidades de identidade, empresa, acesso, documentos e auditoria; faltam Module, ModulePrice, Entitlement, Subscription e Trial)
@@ -1582,14 +1582,14 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 **Billing:** 🔴 NÃO IMPLEMENTADO
 **WhatsApp:** 🔴 NÃO IMPLEMENTADO
 **IA:** 🔴 NÃO IMPLEMENTADO
-**Testes:** 🟡 PARCIAL (232 unitários, 74 integração, 15 E2E; CI bloqueando o deploy)
+**Testes:** 🟡 PARCIAL (256 unitários, 74 integração, 17 E2E; CI bloqueando o deploy)
 
 ## Bloqueadores
 
-- ⏳ **E-mail transacional — Resend** (escolhido pelo usuário em 2026-09-11, DEC-018): faltam o domínio de envio verificado no Resend e a chave de API configurada no Railway. Bloqueia verificação de e-mail (obrigatória), recuperação de senha e link mágico.
-- ⏳ **Credenciais OAuth do Google**: bloqueiam o login com Google.
+- 📋 **Backlog (adiado pelo usuário em 2026-09-11):** e-mail transacional (Resend), login com Google e cópia/backup das chaves e do banco — ver seção 26. Não devem ser cobrados agora; retomar quando o projeto estiver perto de concluir.
+
 - **Arquivos vetoriais da logo (SVG):** não bloqueia; os recortes raster atuais atendem a página e os ícones.
-- ⏳ **Backups do PostgreSQL de produção**: exigem plano Pro no Railway ou dump para storage externo; hoje não há backup. Decisão adiada pelo usuário em 2026-09-11.
+
 - ⏳ **Proteção da branch `main`**: exige GitHub Pro ou repositório público.
 - Decisões comerciais para a FASE 3: módulos iniciais do catálogo, preços, dependências, kits e regras do trial.
 - Decisões pendentes sem bloqueio imediato: unicidade de CNPJ entre empresas, retenção de `audit_logs` × LGPD, adoção de RLS, rotação de chaves.
@@ -1719,3 +1719,56 @@ Verificação em produção: após o merge e o deploy.
 
 - Erros encontrados nos próprios testes durante o desenvolvimento (corrigidos): códigos de recuperação falsos com caracteres fora do alfabeto base32; testes que reapresentavam o mesmo código do app (o sistema recusou corretamente); URI do app autenticador comparada sem decodificar; lista de tabelas dependendo da ordenação do banco.
 - Pendente: desativar/recadastrar o segundo fator e gerar novos códigos de recuperação (exigirá reautenticação por senha).
+
+---
+
+# 26. BACKLOG (adiado pelo usuário)
+
+Itens que dependem de decisão, conta ou credencial do usuário e foram **adiados por escolha dele em 2026-09-11**. Enquanto estiverem aqui, não devem ser cobrados a cada etapa.
+
+## Quando retomar
+
+**Antes da FASE 7 (MVP oficial e testes)** — e obrigatoriamente antes de qualquer cliente real usar o sistema. Nesse momento, apresentar esta lista ao usuário.
+
+## Itens
+
+| Item | O que falta | O que fica bloqueado |
+|---|---|---|
+| **E-mail transacional (Resend — DEC-018)** | domínio de envio verificado no Resend e chave de API nas variáveis do Railway | verificação de e-mail (obrigatória no MASTER SPEC), recuperação de senha, link mágico, convites e alertas por e-mail |
+| **Login com Google** | credenciais OAuth (Google Cloud Console) e URL de callback | entrar com Google |
+| **Cópia das chaves e backup do banco** | guardar `APP_ENCRYPTION_KEY` e `APP_HMAC_KEY` em cofre de senhas; definir backup do PostgreSQL (plano Pro no Railway ou dump para storage externo) | recuperação em caso de perda das chaves (CPFs cifrados e login por CPF) e recuperação de desastre |
+
+## Riscos enquanto estiverem no backlog
+
+- ⚠️ **Não há backup do banco de produção.** Perda de dados seria irreversível.
+- ⚠️ **As chaves de criptografia existem apenas no Railway.** Sem cópia, CPFs cifrados ficam ilegíveis e o login por CPF para de funcionar.
+- ⚠️ **Sem verificação de e-mail**, qualquer endereço pode ser usado no cadastro; e **sem recuperação de senha**, quem esquecer a senha perde o acesso.
+
+Esses riscos são aceitáveis enquanto o sistema não tem clientes reais.
+
+## 2026-09-11 — FASE 2 (parte 4): headers de segurança, logs e limite nas rotas
+
+### O que foi feito
+
+| Item | Evidência |
+|---|---|
+| Headers | `src/proxy.ts` + `src/infrastructure/http/security-headers.ts`: CSP com nonce por requisição e `strict-dynamic`, HSTS em HTTPS, `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, COOP/CORP e `x-request-id` |
+| Página dinâmica | `export const dynamic = "force-dynamic"` na página inicial: sem isso o HTML pré-gerado não teria o nonce e a CSP bloquearia os scripts do Next.js |
+| Logs | `src/infrastructure/observability/logger.ts`: JSON por evento, nível por `LOG_LEVEL`, redação automática de campos sensíveis; usados nas recusas de autorização e nos bloqueios por limite |
+| Limite | `enforceRequestRateLimit`: 120 req/min por IP nas rotas de negócio, com `429` e `Retry-After` |
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm test` | ✅ 21 arquivos, 256 testes (novos: CSP/HSTS, logger com redação, limite por IP) |
+| `pnpm test:integration` | ✅ 6 arquivos, 74 testes |
+| `pnpm test:e2e` | ✅ 17 testes (novos: headers nas rotas e na página; nonce diferente por requisição e presente nos scripts) |
+| `pnpm build` | ✅ proxy registrado; página inicial dinâmica |
+
+Verificação em produção: após o merge e o deploy.
+
+### Observações
+
+- O limite de 120 req/min é por IP. Atrás do proxy do Railway o IP vem do último valor de `X-Forwarded-For`.
+- Um ajuste foi necessário no helper de limite: ele lia a configuração de ambiente para obter o logger, o que quebrava testes unitários; o logger passou a ser injetável.

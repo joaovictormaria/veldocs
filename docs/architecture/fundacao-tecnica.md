@@ -237,9 +237,32 @@ Obrigatório para os perfis **OWNER** e **ADMIN** (`src/domain/access-control/mf
 
 Pendente: desativar/recadastrar o segundo fator (exigirá reautenticação por senha) e gerar novos códigos de recuperação.
 
+### Headers de segurança, logs e limites
+
+Aplicados pelo `src/proxy.ts` (convenção do Next.js 16, roda em Node.js) a todas as respostas, exceto arquivos estáticos:
+
+| Header | Valor |
+|---|---|
+| `Content-Security-Policy` | `default-src 'self'`; scripts só com o **nonce da requisição** + `strict-dynamic`; `frame-ancestors 'none'`; `object-src 'none'`; `base-uri`/`form-action` `'self'`; `upgrade-insecure-requests` |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` — **apenas quando `APP_URL` é https** |
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `DENY` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Permissions-Policy` | câmera, microfone, localização, pagamento e USB desativados |
+| `Cross-Origin-Opener-Policy` / `Cross-Origin-Resource-Policy` | `same-origin` |
+| `x-request-id` | recebido do cliente ou gerado; devolvido na resposta e usado nos logs |
+
+- O nonce é gerado por requisição e repassado ao Next.js pelo header da requisição, que assina os próprios scripts. **Por isso a página inicial é dinâmica** (`export const dynamic = "force-dynamic"`): HTML pré-gerado não teria o nonce da requisição e os scripts seriam bloqueados. Um teste E2E confere que o nonce do cabeçalho aparece nos scripts do HTML.
+- `'unsafe-eval'` só em desenvolvimento (o React usa `eval` para melhorar mensagens de erro).
+- Autenticação e autorização **não** ficam no proxy: cada rota decide, como recomenda a documentação do Next.js.
+
+**Logs estruturados** (`src/infrastructure/observability/logger.ts`): uma linha JSON por evento, com nível controlado por `LOG_LEVEL`. Campos com nome sensível (senha, token, segredo, CPF, cookie, código, authorization) são redigidos automaticamente. Hoje registram-se recusas de autorização e bloqueios por limite de requisições, sempre com o `requestId`. Coleta centralizada e métricas: pendentes.
+
+**Limite nas rotas de negócio**: 120 requisições por minuto por IP (`api:read`), respondendo `429` com `Retry-After`.
+
 ### Pendente na FASE 2
 
-Verificação de e-mail (obrigatória no MASTER SPEC v0.2), link mágico e recuperação de senha (Resend, aguardando domínio e chave); login com Google; headers de segurança (CSP, HSTS) e logs estruturados; rate limiting nas rotas de negócio; rotação de chaves.
+Verificação de e-mail, link mágico e recuperação de senha (Resend — backlog); login com Google (backlog); rotação de chaves; coleta centralizada de logs e métricas.
 
 Com o modelo modular (MASTER SPEC v0.2), o cadastro deverá levar ao **VELDOCS Builder** e o trial de 14 dias começará após a escolha dos módulos — isso pertence à FASE 3 (catálogo de módulos, entitlements, Builder, preço e trial).
 
