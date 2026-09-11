@@ -27,7 +27,7 @@ veldocs/
 ├── src/
 │   ├── app/                  # PRESENTATION (entrada): rotas Next.js, layouts, route handlers.
 │   │                         #   Rotas são finas e fazem a composição (injetam infraestrutura em casos de uso).
-│   ├── presentation/         # PRESENTATION: componentes/conteúdo de UI reutilizável (design system: pendente)
+│   ├── presentation/         # PRESENTATION: telas (screens/), componentes base (components/) e conteúdo de UI — Tailwind CSS
 │   ├── application/          # APPLICATION: casos de uso e portas (interfaces)
 │   │   ├── ports/            #   Storage, IA, WhatsApp, notificações, auditoria, rate limit, health
 │   │   └── system/           #   caso de uso de health check
@@ -252,7 +252,7 @@ Aplicados pelo `src/proxy.ts` (convenção do Next.js 16, roda em Node.js) a tod
 | `Cross-Origin-Opener-Policy` / `Cross-Origin-Resource-Policy` | `same-origin` |
 | `x-request-id` | recebido do cliente ou gerado; devolvido na resposta e usado nos logs |
 
-- O nonce é gerado por requisição e repassado ao Next.js pelo header da requisição, que assina os próprios scripts. **Por isso a página inicial é dinâmica** (`export const dynamic = "force-dynamic"`): HTML pré-gerado não teria o nonce da requisição e os scripts seriam bloqueados. Um teste E2E confere que o nonce do cabeçalho aparece nos scripts do HTML.
+- O nonce é gerado por requisição e repassado ao Next.js pelo header da requisição, que assina os próprios scripts. **Por isso todas as páginas são dinâmicas** (`export const dynamic = "force-dynamic"`): HTML pré-gerado não teria o nonce da requisição e os scripts seriam bloqueados. Um teste E2E confere que o nonce do cabeçalho aparece nos scripts do HTML.
 - `'unsafe-eval'` só em desenvolvimento (o React usa `eval` para melhorar mensagens de erro).
 - Autenticação e autorização **não** ficam no proxy: cada rota decide, como recomenda a documentação do Next.js.
 

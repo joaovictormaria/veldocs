@@ -24,7 +24,7 @@ Superfícies do quadro da marca (fundo das logos recortadas):
 | Superfície clara | `#FBFAFA` | `--surface-light` |
 | Superfície escura | `#121317` | `--surface-dark` |
 
-Constantes equivalentes em [`src/presentation/brand.ts`](../../src/presentation/brand.ts); um teste unitário garante que CSS e código usam os mesmos valores.
+Constantes equivalentes em [`src/presentation/brand.ts`](../../src/presentation/brand.ts); um teste unitário garante que CSS e código usam os mesmos valores. No Tailwind, os tokens viram as cores `brand-primary`, `brand-dark`, `brand-cyan`, `surface-light` e `surface-dark` (`@theme` em `src/app/globals.css`).
 
 > Acessibilidade: para texto pequeno, use o azul escuro sobre fundo claro e o ciano sobre fundo escuro. O azul principal fica reservado a elementos gráficos e textos grandes.
 

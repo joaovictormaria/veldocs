@@ -2,7 +2,7 @@
 
 Fonte da verdade: `src/app/api/builder/`, `src/app/api/subscription/`, [`src/application/billing/`](../../src/application/billing/) e [`src/domain/billing/`](../../src/domain/billing/).
 
-O Builder é o passo seguinte ao cadastro (MASTER SPEC 2.4): a empresa escolhe um kit e/ou módulos, vê o preço mensal calculado pelo servidor e inicia o trial de 14 dias. **Esta é a API; a tela ainda não existe.**
+O Builder é o passo seguinte ao cadastro (MASTER SPEC 2.4): a empresa escolhe um kit e/ou módulos, vê o preço mensal calculado pelo servidor e inicia o trial de 14 dias. A tela `/builder` usa esta API — ver [`docs/frontend/telas.md`](../frontend/telas.md).
 
 ## Permissões
 
@@ -68,7 +68,6 @@ Numa única transação: cria a assinatura `TRIALING` (14 dias a partir de agora
 
 ## Ainda não existe
 
-- A tela do Builder.
 - Trocar kit ou módulos durante o trial (MASTER SPEC 2.8).
 - Pagamento e as transições de assinatura acionadas por cobrança (FASE 16).
 - Exclusão de contas após a retenção (DEC-025).

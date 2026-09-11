@@ -377,7 +377,7 @@ O objetivo é **mostrar valor**, e não pressionar o usuário.
 - 🔴 NÃO IMPLEMENTADO — Dashboard
 - 🟡 PARCIAL — Auditoria/histórico (`audit_logs` append-only; eventos de cadastro, login e logout)
 - 🔴 NÃO IMPLEMENTADO — Versionamento
-- 🟡 PARCIAL — Builder de módulos (API pronta: catálogo, preço em tempo real e início do trial — `docs/api/builder.md`; tela pendente)
+- 🟡 PARCIAL — Builder de módulos (API e tela: catálogo, preço em tempo real, sugestão de kit e início do trial — `docs/api/builder.md`, `docs/frontend/telas.md`; troca de módulos durante o trial pendente)
 - 🟡 PARCIAL — Trial de 14 dias (início pela API do Builder e estados derivados do tempo; cobrança ao fim do trial pendente — FASE 16)
 - 🟡 PARCIAL — Estados de assinatura/trial (estados da seção 2.8, bloqueio sem assinatura válida e retenção — DEC-022 e DEC-025; transições por cobrança pendentes)
 
@@ -543,6 +543,7 @@ A arquitetura deve permitir extrair componentes no futuro quando houver necessid
 - Next.js
 - React
 - TypeScript
+- Tailwind CSS v4 (decisão do usuário, DEC-029)
 
 ## 5.3 Backend
 
@@ -973,15 +974,15 @@ Entidades existentes além da lista: `Membership` (vínculo pessoa ↔ empresa),
 
 ## 11.2 Builder de módulos
 
-> **Status (2026-09-11):** 🔴 NÃO IMPLEMENTADO na interface. A API que alimenta cada item já existe (`docs/api/builder.md`): catálogo com preços e status (`/api/builder/catalog`), total em tempo real com sugestão de kit (`/api/builder/quote`) e resumo do trial (`/api/subscription`).
+> **Status (2026-09-11):** 🟡 PARCIAL. Tela `/builder` (`docs/frontend/telas.md`), coberta por E2E no navegador (`tests/e2e/builder-ui.spec.ts`).
 
-- [ ] Catálogo visual
-- [ ] Preço por módulo
-- [ ] Status ativo/inativo
-- [ ] Dependências
-- [ ] Total em tempo real
-- [ ] Resumo do trial
-- [ ] CTA de assinatura
+- [x] Catálogo visual — kits e módulos com nome, benefício e público
+- [x] Preço por módulo — e por kit
+- [x] Status ativo/inativo — Obrigatório, Incluído no kit e Em breve
+- [ ] Dependências — nenhuma declarada além do Core (DEC-023)
+- [x] Total em tempo real — calculado no servidor, com sugestão do kit que barateia a escolha
+- [x] Resumo do trial — estado, dias restantes, kit, módulos e valor após o trial
+- [ ] CTA de assinatura — depende do pagamento (FASE 16)
 
 ## 11.3 Área de expansão
 
@@ -1150,7 +1151,7 @@ Registrar, quando aplicável:
 > Suíte atual: 17 testes Playwright — passaram (local; CI roda contra `pnpm start`).
 
 - ✅ CONCLUÍDO — Cadastro (`tests/e2e/auth.spec.ts`: cookie HttpOnly/SameSite, sessão, login por CPF, logout, credenciais inválidas, origem e JSON obrigatórios)
-- 🟡 PARCIAL — Builder (`tests/e2e/builder.spec.ts`, pela API: catálogo, preço com sugestão de kit, kit + módulo avulso, início do trial, repetição recusada, escolha inválida, sessão e origem; sem tela)
+- 🟡 PARCIAL — Builder (`tests/e2e/builder.spec.ts` pela API e `tests/e2e/builder-ui.spec.ts` no navegador: cadastro → segundo fator → kit + módulo → trial, sugestão de kit, login com código de recuperação, convite pela tela, telas protegidas; troca de módulos pendente)
 - 🔴 NÃO IMPLEMENTADO — Ativação de módulo
 - 🔴 NÃO IMPLEMENTADO — Desativação
 - 🔴 NÃO IMPLEMENTADO — Trial
@@ -1327,7 +1328,7 @@ As recomendações devem ser:
 
 ## FASE 3 — Empresa, usuários e módulos comerciais
 
-**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada. Da segunda, já existem o catálogo de módulos, os entitlements por empresa e os estados do trial no backend; faltam a tela do Builder (a API existe), a troca de kit e módulos durante o trial, perfis personalizados e a exclusão de contas após a retenção. Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
+**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada. Da segunda, já existem o catálogo de módulos, os entitlements por empresa e os estados do trial no backend; faltam a troca de kit e módulos durante o trial, perfis personalizados e a exclusão de contas após a retenção. Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
 
 - ✅ CONCLUÍDO — Empresas (entidade, criação no cadastro e edição dos dados cadastrais com CNPJ validado)
   - Evidência: `PATCH /api/company` (`company.update`), `src/application/access/manage-company.ts`, `src/domain/company/cnpj.ts`; auditoria `company.updated`.
@@ -1353,7 +1354,8 @@ As recomendações devem ser:
 - 🟡 PARCIAL — Builder
   - Evidência (API): `GET /api/builder/catalog`, `GET /api/builder/quote`, `POST /api/builder/trial` e `GET /api/subscription`, com as permissões `billing.read`/`billing.manage` de OWNER e ADMIN (DEC-026); `src/application/billing/subscription-use-cases.ts`; documentação em `docs/api/builder.md`.
   - Testes: `tests/unit/application/billing/subscription-use-cases.test.ts`, `tests/integration/billing/subscription.test.ts` e `tests/e2e/builder.spec.ts` — passaram (local, 2026-09-11).
-  - Pendente: a tela e a troca de kit e módulos durante o trial.
+  - Tela: `/builder`, com telas de cadastro, login, segundo fator e convite (Tailwind CSS, DEC-029); `tests/e2e/builder-ui.spec.ts` — passou.
+  - Pendente: troca de kit e módulos durante o trial.
 - 🟡 PARCIAL — Preço em tempo real
   - Evidência: preço vigente por data em `src/infrastructure/database/prisma-billing-catalog-repository.ts` e orçamento calculado no backend em `src/domain/billing/pricing.ts` via `createCatalogQueries.quote` — Core sempre incluído, dependências resolvidas, módulo sem preço vigente explícito em vez de valer zero.
   - Testes: `tests/unit/domain/billing/pricing.test.ts` e `tests/integration/billing/module-prices.test.ts` — passaram (local, 2026-09-11).
@@ -1757,19 +1759,33 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 ---
 
+## DEC-029 — Telas com Tailwind CSS e dados carregados no servidor
+
+**Status:** ✅ CONCLUÍDO (implementado na FASE 3)
+
+**Decisão:** o estilo usa Tailwind CSS v4 (pedido do usuário em 2026-09-11), integrado pelo PostCSS como na documentação do Next.js 16. Os tokens da marca continuam em `:root` e são expostos ao Tailwind em `@theme` (`brand-*`, `surface-*`). As páginas são componentes de servidor: leem a sessão, redirecionam e carregam os dados com a mesma autorização da API; os componentes de cliente só cuidam da interação.
+
+**Motivos:** carregar no servidor evita a tela piscando antes do redirecionamento e uma ida e volta à API ao abrir a tela, e respeita a regra `react-hooks/set-state-in-effect` do React 19. Toda página é dinâmica por causa do nonce da CSP.
+
+**Cuidados de segurança nas telas:** o destino depois do login só aceita caminhos internos (`safeNextPath`, sem redirecionamento aberto); a chave do autenticador é gerada por clique, porque em desenvolvimento o React executa efeitos duas vezes e a chave exibida poderia não ser a gravada; a tela do convite usa `referrer: no-referrer`, para o token não vazar no cabeçalho `Referer`.
+
+**Evidência:** `src/app/{cadastro,entrar,seguranca,builder,convite/[token],inicio}/page.tsx`, `src/presentation/screens/`, `docs/frontend/telas.md`; `tests/e2e/builder-ui.spec.ts` — passou.
+
+---
+
 # 24. STATUS GERAL
 
 **Produto:** ✅ CONCLUÍDO (definição e identidade visual; vetores da logo pendentes)
 **Arquitetura:** ✅ CONCLUÍDO (monólito modular em camadas; entitlements por empresa na cadeia de autorização)
 **Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit, CSRF, empresa ativa, RBAC, MFA para OWNER/ADMIN, CSP com nonce, HSTS e logs estruturados; verificação de e-mail e recuperação de senha no backlog)
-**Frontend:** 🔴 NÃO IMPLEMENTADO (somente página inicial da fundação)
+**Frontend:** 🟡 PARCIAL (Tailwind CSS; telas de cadastro, login, segundo fator, Builder e convite; sem dashboard nem telas de documentos)
 **Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial, entitlements por empresa, API do Builder com início do trial e gestão de membros com convites; sem módulos de negócio)
 **Banco:** 🟡 PARCIAL (identidade, empresa, acesso, documentos, auditoria, catálogo comercial com preços e kits, módulos por empresa e assinatura com prazos de retenção)
 **Storage:** 🔴 NÃO IMPLEMENTADO
 **Billing:** 🔴 NÃO IMPLEMENTADO
 **WhatsApp:** 🔴 NÃO IMPLEMENTADO
 **IA:** 🔴 NÃO IMPLEMENTADO
-**Testes:** 🟡 PARCIAL (357 unitários, 135 integração, 29 E2E; CI bloqueando o deploy)
+**Testes:** 🟡 PARCIAL (372 unitários, 135 integração, 34 E2E; CI bloqueando o deploy)
 
 ## Bloqueadores
 
@@ -2256,3 +2272,38 @@ Verificação em produção: após o merge e o deploy. A migração só acrescen
 
 - A tela `/convite/{token}` entra junto com as telas de acesso e do Builder, logo em seguida; até lá o link funciona pela API.
 - Perfis personalizados (`roles.manage`) continuam pendentes.
+
+---
+
+## 2026-09-11 — FASE 3: telas de acesso, segundo fator, Builder e convite
+
+### O que foi feito
+
+| Tela | Rota | O que faz |
+|---|---|---|
+| Cadastro | `/cadastro` | cria conta e empresa e segue para o segundo fator |
+| Login | `/entrar` | e-mail ou CPF e senha; volta ao destino pedido, só caminhos internos |
+| Segundo fator | `/seguranca` | configura o app autenticador (chave, código, códigos de recuperação) ou verifica com código do app ou de recuperação |
+| Builder | `/builder` | kits e módulos com preços, total em tempo real calculado no servidor, sugestão de kit e início do trial; depois, o resumo da assinatura |
+| Convite | `/convite/[token]` | aceite com a conta atual ou cadastro já como membro |
+| Início | `/inicio` | encaminha para o próximo passo |
+| Página inicial | `/` | chamadas para criar conta e entrar |
+
+Tailwind CSS 4.3.3 com os tokens da marca em `@theme`; páginas de servidor com dados carregados sob a mesma autorização da API (DEC-029). Documentação em `docs/frontend/telas.md`.
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm lint` / `tsc --noEmit` | ✅ sem erros |
+| `pnpm test` | ✅ 31 arquivos, 372 testes (novos: destino seguro depois do login, mensagens da API, formatação de dinheiro e datas) |
+| `pnpm test:integration` | ✅ 11 arquivos, 135 testes |
+| `pnpm test:e2e` | ✅ 34 testes (novos, no navegador: cadastro → segundo fator → kit Gestão + Contratos → trial; sugestão de kit; login com código de recuperação; convite pela tela; telas protegidas) |
+| `pnpm build` | ✅ |
+
+Verificação em produção: após o merge e o deploy.
+
+### Observações
+
+- Dois ajustes durante a implementação: o carregamento do Builder saiu de um `useEffect` para o servidor (regra `react-hooks/set-state-in-effect` do React 19), e uma expectativa do E2E supunha a barra codificada no redirecionamento (`next=%2Fbuilder`), que o Next.js não codifica.
+- Troca de kit e módulos durante o trial: próxima etapa.
