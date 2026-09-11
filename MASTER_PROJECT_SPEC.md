@@ -553,7 +553,7 @@ Poderá ser introduzido futuramente apenas para necessidades específicas de IA/
 | Workers assíncronos | 🔴 NÃO IMPLEMENTADO | — |
 | WhatsApp Business API | 🔴 NÃO IMPLEMENTADO | somente contrato `WhatsAppProvider` |
 | Provedor de IA | 🔴 NÃO IMPLEMENTADO | somente contrato `AiProvider` |
-| E-mail transacional | ⏳ BLOQUEADO | serviço ainda não escolhido pelo usuário |
+| E-mail transacional | ⏳ BLOQUEADO | Resend escolhido (DEC-018); aguardando domínio verificado e chave de API |
 | Python | ✅ CONCLUÍDO | não utilizado |
 
 ---
@@ -609,10 +609,10 @@ Referências principais:
   - Evidência: `POST /api/auth/login` (e-mail ou CPF com/sem máscara), `POST /api/auth/signup`; `src/application/auth/login.ts`, `register.ts`. Resposta idêntica para qualquer falha e verificação de senha equalizada para conta inexistente.
   - Testes: `tests/unit/application/auth/login-and-register.test.ts`, `tests/integration/auth/auth-services.test.ts`, `tests/e2e/auth.spec.ts` — passaram (local e CI). Produção: login com conta inexistente → HTTP 401 genérico, sem cookie.
 - ✅ CONCLUÍDO — Hash de senha no backend: Argon2id (19 MiB, t=2, p=1), mínimo 12 e máximo 128 caracteres. Teste: prefixo `$argon2id$v=19$m=19456,t=2,p=1$` — passou.
-- ⏳ BLOQUEADO — Recuperação segura de senha (depende do serviço de e-mail transacional).
+- ⏳ BLOQUEADO — Recuperação segura de senha (Resend escolhido; depende do domínio verificado e da chave de API).
 - ✅ CONCLUÍDO — Rate limit de autenticação: login 30/15 min por IP e 10/15 min por conta (HMAC do identificador); cadastro 10/h por IP. Testes: bloqueio após 10 tentativas e contagem concorrente — passaram.
 - 🔴 NÃO IMPLEMENTADO — MFA (decidido: TOTP + códigos de recuperação para OWNER/ADMIN; `sessions.mfa_verified_at` já existe).
-- ⏳ BLOQUEADO — Verificação de e-mail (coluna `users.email_verified_at` existe; depende do serviço de e-mail).
+- ⏳ BLOQUEADO — Verificação de e-mail (coluna `users.email_verified_at` existe; Resend escolhido, depende do domínio verificado e da chave de API).
 - ✅ CONCLUÍDO — Logout de sessões: `POST /api/auth/logout` e `POST /api/auth/logout-all` (integração + E2E — passaram).
 
 ## 7.2 Sessões e tokens
@@ -1027,7 +1027,7 @@ O número deve ser vinculado a uma identidade do sistema e respeitar todas as pe
 
 # 14. NOTIFICAÇÕES E ALERTAS
 
-> **Status (2026-09-11):** 🔴 NÃO IMPLEMENTADO — somente o contrato `NotificationChannel`. O envio por e-mail depende da escolha do serviço transacional.
+> **Status (2026-09-11):** 🔴 NÃO IMPLEMENTADO — somente o contrato `NotificationChannel`. O envio por e-mail usará o Resend (DEC-018), após domínio verificado e chave de API.
 
 Canais planejados:
 
@@ -1201,7 +1201,7 @@ As recomendações devem ser:
 
 # 20. BACKUP E DISASTER RECOVERY
 
-- ⏳ BLOQUEADO — Backups automáticos: o agendamento de backups do volume PostgreSQL foi recusado pela API do Railway ("Not Authorized") no plano Hobby; PITR desativado. Requer decisão: plano Pro ou dump para storage externo. **Hoje não há backup de produção.**
+- ⏳ BLOQUEADO — Backups automáticos: o agendamento de backups do volume PostgreSQL foi recusado pela API do Railway ("Not Authorized") no plano Hobby; PITR desativado. Requer decisão: plano Pro ou dump para storage externo. **Hoje não há backup de produção.** Decisão adiada pelo usuário em 2026-09-11.
 - [ ] Criptografia
 - [ ] Retenção
 - [ ] Testes de restore
@@ -1234,10 +1234,12 @@ As recomendações devem ser:
 
 ## FASE 0 — Produto e posicionamento
 
-**Status da fase:** 🟡 PARCIAL — definição completa (`docs/product/visao-do-produto.md`, página inicial); falta a identidade visual.
+**Status da fase:** ✅ CONCLUÍDO — definição (`docs/product/visao-do-produto.md`) e identidade visual (`docs/brand/identidade-visual.md`) aplicadas em 2026-09-11.
 
 - ✅ CONCLUÍDO — Nome VELDOCS (página inicial e `<title>`; E2E — passou)
-- 🟡 PARCIAL — Identidade de marca (assinatura, conceito e ecossistema VELNOX.IA definidos; logo e cor padrão aguardando arquivos do usuário)
+- ✅ CONCLUÍDO — Identidade de marca: logo, ícone e paleta oficial (`#3D5AFE`, `#2541B2`, `#00E5FF`) a partir de `docs/brand/VELDOCS-logo.pdf`; aplicadas na página inicial, tokens de CSS, favicon, `icon` e `apple-icon`.
+  - Testes: `tests/unit/presentation/brand.test.ts` (paleta, tokens e dimensões dos arquivos) e E2E "exibe a logo oficial e publica favicon e ícones da marca".
+  - Observação: o PDF contém só imagem raster; arquivos vetoriais (SVG) originais pendentes.
 - ✅ CONCLUÍDO — Proposta de valor
 - ✅ CONCLUÍDO — Público
 - ✅ CONCLUÍDO — Conceito Zero surpresa documental
@@ -1541,11 +1543,23 @@ Motivo: evitar nova infraestrutura antes da necessidade. UPSERT atômico em `rat
 
 Motivo: banco gerenciado, rede privada entre app e banco, HTTPS automático e deploy a partir do GitHub. Configuração aplicada via API (pre-deploy `pnpm db:deploy`, start, healthcheck `/api/health`, restart, `checkSuites: true`). Pendências: staging, backups (bloqueados no plano Hobby) e migração para `.railway/railway.ts` declarando também variáveis e origem.
 
+## DEC-018 — Resend como serviço de e-mail transacional
+
+**Status:** ✅ DECIDIDO (usuário, 2026-09-11) — implementação ⏳ aguardando domínio verificado e chave de API
+
+Motivo: integração simples com Node.js/Next.js e plano inicial adequado ao MVP. Usos previstos: verificação de e-mail, recuperação de senha, link mágico, convites e alertas. O envio ficará atrás da porta de notificações/e-mail, com adaptador de desenvolvimento que não envia e-mails reais. A chave de API deve ficar apenas nas variáveis do Railway.
+
+## DEC-019 — Identidade visual oficial
+
+**Status:** ✅ CONCLUÍDO (2026-09-11)
+
+Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3D5AFE` (azul principal), `#2541B2` (azul escuro) e `#00E5FF` (ciano); logo e ícone em `public/brand/` e `src/app/`. Evidência: `docs/brand/identidade-visual.md`, `tests/unit/presentation/brand.test.ts` e E2E da página inicial. Pendência: arquivos vetoriais originais.
+
 ---
 
 # 24. STATUS GERAL
 
-**Produto:** 🟡 PARCIAL (definição completa; identidade visual pendente)
+**Produto:** ✅ CONCLUÍDO (definição e identidade visual; vetores da logo pendentes)
 **Arquitetura:** ✅ CONCLUÍDO (monólito modular em camadas; entitlements ainda não existem)
 **Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit e CSRF nas rotas de auth; empresa ativa e RBAC nas rotas; MFA, CSP/HSTS e logs pendentes)
 **Frontend:** 🔴 NÃO IMPLEMENTADO (somente página inicial da fundação)
@@ -1559,10 +1573,10 @@ Motivo: banco gerenciado, rede privada entre app e banco, HTTPS automático e de
 
 ## Bloqueadores
 
-- ⏳ **Serviço de e-mail transacional** (decisão do usuário): bloqueia verificação de e-mail (obrigatória), recuperação de senha e link mágico.
+- ⏳ **E-mail transacional — Resend** (escolhido pelo usuário em 2026-09-11, DEC-018): faltam o domínio de envio verificado no Resend e a chave de API configurada no Railway. Bloqueia verificação de e-mail (obrigatória), recuperação de senha e link mágico.
 - ⏳ **Credenciais OAuth do Google**: bloqueiam o login com Google.
-- ⏳ **Identidade visual** (logo e cor padrão): aguardando arquivos do usuário.
-- ⏳ **Backups do PostgreSQL de produção**: exigem plano Pro no Railway ou dump para storage externo; hoje não há backup.
+- **Arquivos vetoriais da logo (SVG):** não bloqueia; os recortes raster atuais atendem a página e os ícones.
+- ⏳ **Backups do PostgreSQL de produção**: exigem plano Pro no Railway ou dump para storage externo; hoje não há backup. Decisão adiada pelo usuário em 2026-09-11.
 - ⏳ **Proteção da branch `main`**: exige GitHub Pro ou repositório público.
 - Decisões comerciais para a FASE 3: módulos iniciais do catálogo, preços, dependências, kits e regras do trial.
 - Decisões pendentes sem bloqueio imediato: unicidade de CNPJ entre empresas, retenção de `audit_logs` × LGPD, adoção de RLS, rotação de chaves.
@@ -1652,3 +1666,15 @@ Verificação em produção: após o merge e o deploy desta mudança.
 - Não há gestão de membros e perfis nas rotas (convites, atribuição de perfis): isso pertence à FASE 3.
 - MFA obrigatório para OWNER/ADMIN ainda não é exigido na cadeia de autorização (MFA não implementado).
 - Negações de acesso ainda não são registradas em log estruturado (logs pendentes).
+
+## 2026-09-11 — Identidade visual, e-mail transacional e backups
+
+| Item | Resultado |
+|---|---|
+| Logo e paleta | `docs/brand/VELDOCS-logo.pdf` (fonte) → `public/brand/veldocs-logo-light.png`, `veldocs-logo-dark.png`, `veldocs-icon.png`; `src/app/favicon.ico`, `icon.png` (192), `apple-icon.png` (180); tokens `--brand-primary`, `--brand-dark`, `--brand-cyan` |
+| Página inicial | logo oficial clara/escura conforme o tema, `themeColor` com as superfícies da marca |
+| E-mail transacional | Resend escolhido (DEC-018); aguardando domínio verificado e chave de API |
+| Backups | decisão adiada pelo usuário |
+| Chaves `APP_ENCRYPTION_KEY`/`APP_HMAC_KEY` | cópia fora do Railway continua pendente com o usuário (valores nunca exibidos nesta sessão) |
+
+Observação: o PDF da marca contém uma única imagem raster (1536 × 1024); os arquivos do projeto são recortes dela. Substituir por vetores (SVG) quando disponíveis.

@@ -8,7 +8,7 @@
 - **Ecossistema:** VELNOX.IA (empresa). O VELDOCS tem identidade visual própria, conectada à família VELNOX, sem depender da identidade do VELNOX.APP.
 - **Assinatura:** Gestão inteligente de documentos empresariais.
 - **Conceito:** **Zero surpresa documental.**
-- **Identidade visual (logo e cor padrão):** pendente — aguardando os arquivos definidos pelo usuário.
+- **Identidade visual:** definida — logo, ícone e paleta `#3D5AFE` (azul principal), `#2541B2` (azul escuro) e `#00E5FF` (ciano). Ver [`docs/brand/identidade-visual.md`](../brand/identidade-visual.md).
 
 ## Propósito
 
