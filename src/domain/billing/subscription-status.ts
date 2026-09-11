@@ -112,3 +112,39 @@ export function canTransition(from: SubscriptionStatus, to: SubscriptionStatus):
 export function isReactivation(from: SubscriptionStatus, to: SubscriptionStatus): boolean {
   return to === "ACTIVE" && (from === "CANCELED" || from === "SUSPENDED");
 }
+
+/**
+ * Retenção de dados depois do fim da assinatura (decisão do usuário,
+ * 2026-09-11, DEC-025):
+ * - CANCELED: dados e login guardados por 1 ano (obrigação legal; prazo a
+ *   confirmar com o jurídico);
+ * - SUSPENDED: dados guardados por 2 meses; depois a conta pode ser apagada.
+ *
+ * Nos dois casos o acesso segue bloqueado (`grantsAccess`). Estas funções só
+ * informam o prazo: nada é apagado automaticamente.
+ */
+export const DATA_RETENTION_DAYS = { CANCELED: 365, SUSPENDED: 60 } as const;
+
+export interface RetentionState {
+  readonly status: SubscriptionStatus;
+  readonly canceledAt: Date | null;
+  readonly suspendedAt: Date | null;
+}
+
+const addDays = (date: Date, days: number) => new Date(date.getTime() + days * DAY_MS);
+
+export function dataRetentionUntil(state: RetentionState): Date | null {
+  if (state.status === "CANCELED" && state.canceledAt) {
+    return addDays(state.canceledAt, DATA_RETENTION_DAYS.CANCELED);
+  }
+  if (state.status === "SUSPENDED" && state.suspendedAt) {
+    return addDays(state.suspendedAt, DATA_RETENTION_DAYS.SUSPENDED);
+  }
+  return null;
+}
+
+/** Prazo de retenção vencido: a conta PODE ser apagada (a exclusão em si não existe ainda). */
+export function isRetentionExpired(state: RetentionState, now: Date): boolean {
+  const until = dataRetentionUntil(state);
+  return until !== null && now.getTime() >= until.getTime();
+}

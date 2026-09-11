@@ -276,7 +276,7 @@ Documentos + Vencimentos + Alertas
 
 Os kits são uma camada comercial opcional sobre os módulos individuais.
 
-**Kits definidos pelo usuário em 2026-09-11** — 🔴 NÃO IMPLEMENTADO:
+**Kits definidos pelo usuário em 2026-09-11** — 🟡 PARCIAL (catálogo, preços, orçamento e sugestão no backend; contratação pelo Builder pendente):
 
 | Kit | Indicado para | Módulos incluídos | Preço | Soma avulsa | Economia |
 |---|---|---|---|---|---|
@@ -287,10 +287,11 @@ Os kits são uma camada comercial opcional sobre os módulos individuais.
 | Controle Avançado | Empresas com processos mais estruturados | Core + Contratos + Aprovações + Automação + Relatórios avançados + Modo auditoria | R$ 169,90 | R$ 219,40 | R$ 49,50 (22,6%) |
 | Complete | Empresas que querem praticamente tudo | Core + todos os 16 módulos | R$ 399,90 | R$ 638,30 | R$ 238,40 (37,3%) |
 
-Pendências antes de implementar:
+Decisões do usuário (2026-09-11), detalhadas em DEC-024:
 
-- **Essencial:** custaria R$ 0,10 a mais que os mesmos módulos avulsos, e "Alertas" não é um módulo do catálogo (os alertas fazem parte do Controle de vencimentos).
-- **Combinação:** como um kit se soma a módulos avulsos e se o Builder sugere o kit quando a seleção sair mais cara que ele.
+- **Essencial mantido** em R$ 69,90, com Core + Controle de vencimentos (os alertas fazem parte de Vencimentos). Como fica R$ 0,10 acima dos mesmos módulos avulsos, o Builder nunca o sugere.
+- **Kit + módulos avulsos:** a empresa pode ter um kit e contratar módulos fora dele; o que está no kit não é cobrado de novo.
+- **Sugestão:** o Builder sugere o kit que deixa a mesma seleção mais barata, mesmo que traga módulos a mais.
 
 ## 2.8 Trial gratuito de 14 dias
 
@@ -328,7 +329,7 @@ Ao término dos 14 dias, caso não exista assinatura válida:
 - recursos de escrita e/ou módulos pagos podem ser bloqueados;
 - deve existir caminho claro para assinatura/reativação.
 
-**Decisão (2026-09-11):** sem assinatura válida, **tudo** é bloqueado — Core incluído e sem carência na inadimplência — e os dados ficam guardados para quando a empresa assinar. Login, sessão, segundo fator e troca de empresa continuam acessíveis. Detalhes em DEC-022.
+**Decisão (2026-09-11):** sem assinatura válida, **tudo** é bloqueado — Core incluído e sem carência na inadimplência — e os dados ficam guardados para quando a empresa assinar. Login, sessão, segundo fator e troca de empresa continuam acessíveis. Detalhes em DEC-022. **Retenção:** assinatura cancelada guarda os dados e o login por 1 ano; suspensa guarda os dados por 2 meses, e depois a conta pode ser apagada (DEC-025).
 
 ## 2.10 Expansão de receita / upsell contextual
 
@@ -1324,7 +1325,7 @@ As recomendações devem ser:
 
 ## FASE 3 — Empresa, usuários e módulos comerciais
 
-**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada. Da segunda, já existem o catálogo de módulos, os entitlements por empresa e os estados do trial no backend; faltam o Builder, a exibição do preço em tempo real, o início do trial e os kits (tabela recebida em 2026-09-11; o Essencial precisa de ajuste). Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
+**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada. Da segunda, já existem o catálogo de módulos, os entitlements por empresa e os estados do trial no backend; faltam o Builder (com a contratação de kits e módulos), a exibição do preço em tempo real, o início do trial e a exclusão de contas após a retenção. Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
 
 - ✅ CONCLUÍDO — Empresas (entidade, criação no cadastro e edição dos dados cadastrais com CNPJ validado)
   - Evidência: `PATCH /api/company` (`company.update`), `src/application/access/manage-company.ts`, `src/domain/company/cnpj.ts`; auditoria `company.updated`.
@@ -1339,7 +1340,8 @@ As recomendações devem ser:
 - 🟡 PARCIAL — Catálogo de módulos
   - Evidência: os 17 módulos da seção 2.3 em `src/domain/billing/module-catalog.ts`, povoados pela migração `commercial_catalog_and_subscriptions` (DEC-023); tabelas `modules`, `module_dependencies` e `module_prices`. Teste de integração compara banco × domínio.
   - Preços: os 17 preços mensais definidos pelo usuário em 2026-09-11, gravados pela migração `module_prices_initial` (seção 2.3).
-  - Pendente: kits (seção 2.7) e dependências além do Core.
+  - Kits: os 6 kits da seção 2.7, com composição e preços, gravados pela migração `20260911051529_kits_and_subscription_retention` (DEC-024).
+  - Pendente: dependências além do Core.
 - ✅ CONCLUÍDO — Entitlements (verificação na cadeia de autorização)
   - Evidência: `company_modules` por empresa; `src/infrastructure/access/database-entitlements.ts` substitui o provisório "só Core"; o Core é provisionado no cadastro; assinatura inválida bloqueia tudo, Core incluído, sem apagar dados; empresa sem assinatura (antes do Builder) usa o Core; módulo pago exige contratação ativa **e** assinatura válida (DEC-022).
   - Testes: `tests/integration/access/entitlements.test.ts` (trial vigente e vencido, módulo não contratado ou desativado, sem assinatura, PAST_DUE/CANCELED/SUSPENDED, isolamento entre empresas, FK do catálogo, Core no cadastro) — passaram (local, 2026-09-11).
@@ -1348,11 +1350,13 @@ As recomendações devem ser:
 - 🟡 PARCIAL — Preço em tempo real
   - Evidência: preço vigente por data em `src/infrastructure/database/prisma-billing-catalog-repository.ts` e orçamento calculado no backend em `src/domain/billing/pricing.ts` via `createCatalogQueries.quote` — Core sempre incluído, dependências resolvidas, módulo sem preço vigente explícito em vez de valer zero.
   - Testes: `tests/unit/domain/billing/pricing.test.ts` e `tests/integration/billing/module-prices.test.ts` — passaram (local, 2026-09-11).
-  - Pendente: exibição no Builder e desconto dos kits.
+  - Kits: orçamento de kit + módulos avulsos (`quoteKit`) e sugestão do kit que barateia a mesma seleção (`suggestKit`) — testes unitários e de integração passaram.
+  - Pendente: exibição no Builder.
 - 🟡 PARCIAL — Trial state machine
   - Evidência: `src/domain/billing/subscription-status.ts` — 14 dias, estados da seção 2.8 (canônicos no banco e derivados do tempo na leitura — DEC-022), transições permitidas e reativação; tabela `subscriptions`.
   - Testes: `tests/unit/domain/billing/subscription-status.test.ts` — passou.
-  - Pendente: início do trial pelo Builder e transições acionadas por cobrança (FASE 16).
+  - Retenção: 1 ano para assinatura cancelada e 2 meses para suspensa (`dataRetentionUntil`, coluna `suspended_at`) — DEC-025.
+  - Pendente: início do trial pelo Builder, transições acionadas por cobrança (FASE 16) e a exclusão de contas após a retenção.
 
 ## FASE 4 — Núcleo documental
 
@@ -1676,6 +1680,34 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 ---
 
+## DEC-024 — Kits como camada sobre os módulos
+
+**Status:** 🟡 PARCIAL (catálogo, preços, orçamento e sugestão implementados na FASE 3; contratação pelo Builder pendente)
+
+**Decisão (usuário, 2026-09-11):** 6 kits (seção 2.7). Um kit pode ser combinado com módulos avulsos: paga-se o preço do kit e, à parte, só os módulos que ficaram fora dele. O Builder sugere o kit que deixar a mesma seleção mais barata, mesmo que traga módulos a mais; sem economia real, não sugere nada.
+
+**Essencial:** mantido pelo usuário em R$ 69,90, com Core + Controle de vencimentos (os alertas fazem parte de Vencimentos). Fica R$ 0,10 acima dos mesmos módulos avulsos e, pela regra de sugestão, nunca é sugerido — continua disponível para quem escolhê-lo.
+
+**Implementação:** tabelas `kits`, `kit_modules` e `kit_prices` (mesmo histórico e mesmos CHECKs dos preços de módulo), povoadas pela migração `20260911051529_kits_and_subscription_retention`; `src/domain/billing/kit-catalog.ts` e `src/domain/billing/pricing.ts` (`quoteKit`, `suggestKit`), expostos por `createCatalogQueries`.
+
+**Evidência:** `tests/unit/domain/billing/kit-catalog.test.ts`, `tests/unit/domain/billing/pricing.test.ts` e `tests/integration/billing/module-prices.test.ts` (banco × domínio, Gestão + Contratos, sugestões do Gestão, Inteligência e Complete, Essencial nunca sugerido) — passaram.
+
+---
+
+## DEC-025 — Retenção de dados após cancelamento e suspensão
+
+**Status:** 🟡 PARCIAL (prazos calculados; exclusão de contas não implementada)
+
+**Decisão (usuário, 2026-09-11):** assinatura **cancelada** mantém os dados no banco e o login por **1 ano** (obrigação legal); assinatura **suspensa** mantém os dados por **2 meses**, e depois a conta pode ser apagada por completo. Nos dois casos o acesso segue bloqueado (DEC-022).
+
+**Implementação:** `dataRetentionUntil` e `isRetentionExpired` em `src/domain/billing/subscription-status.ts`, contando a partir de `canceled_at` e da nova coluna `suspended_at`. **Nada é apagado automaticamente.**
+
+**Pendente:** confirmar com o jurídico o prazo legal após o cancelamento (o usuário citou 1 ano como exemplo). A exclusão de contas é irreversível e só será implementada com autorização explícita, junto com o registro da exclusão (FASE 17 — LGPD).
+
+**Evidência:** `tests/unit/domain/billing/subscription-status.test.ts` (1 ano, 60 dias, sem data de início, vencimento no instante final, bloqueio mantido) — passou.
+
+---
+
 # 24. STATUS GERAL
 
 **Produto:** ✅ CONCLUÍDO (definição e identidade visual; vetores da logo pendentes)
@@ -1683,12 +1715,12 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 **Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit, CSRF, empresa ativa, RBAC, MFA para OWNER/ADMIN, CSP com nonce, HSTS e logs estruturados; verificação de e-mail e recuperação de senha no backlog)
 **Frontend:** 🔴 NÃO IMPLEMENTADO (somente página inicial da fundação)
 **Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial e entitlements por empresa; sem módulos de negócio)
-**Banco:** 🟡 PARCIAL (identidade, empresa, acesso, documentos, auditoria, catálogo comercial com preços, módulos por empresa e assinatura; kits ainda não modelados)
+**Banco:** 🟡 PARCIAL (identidade, empresa, acesso, documentos, auditoria, catálogo comercial com preços e kits, módulos por empresa e assinatura com prazos de retenção)
 **Storage:** 🔴 NÃO IMPLEMENTADO
 **Billing:** 🔴 NÃO IMPLEMENTADO
 **WhatsApp:** 🔴 NÃO IMPLEMENTADO
 **IA:** 🔴 NÃO IMPLEMENTADO
-**Testes:** 🟡 PARCIAL (313 unitários, 115 integração, 23 E2E; CI bloqueando o deploy)
+**Testes:** 🟡 PARCIAL (332 unitários, 123 integração, 23 E2E; CI bloqueando o deploy)
 
 ## Bloqueadores
 
@@ -1697,7 +1729,7 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 - **Arquivos vetoriais da logo (SVG):** não bloqueia; os recortes raster atuais atendem a página e os ícones.
 
 - ⏳ **Proteção da branch `main`**: exige GitHub Pro ou repositório público.
-- Decisões comerciais pendentes da FASE 3: ajuste do Kit Essencial (custaria R$ 0,10 a mais que os módulos avulsos, e "Alertas" não é módulo), regra de combinação de kits com módulos avulsos e dependências além do Core. Preços, carência e bloqueio sem assinatura foram decididos em 2026-09-11.
+- Pendências da FASE 3: dependências entre módulos além do Core; confirmar com o jurídico o prazo de 1 ano de retenção após o cancelamento; autorizar a exclusão de contas suspensas após 2 meses (irreversível, ainda não implementada). Preços, kits, carência, bloqueio e retenção foram decididos em 2026-09-11.
 - Decisões pendentes sem bloqueio imediato: unicidade de CNPJ entre empresas, retenção de `audit_logs` × LGPD, adoção de RLS, rotação de chaves.
 
 ## Regra final
@@ -2065,3 +2097,45 @@ O **Essencial** sairia R$ 0,10 mais caro que os mesmos módulos avulsos, e "Aler
 | `pnpm build` | ✅ |
 
 Verificação em produção: após o merge e o deploy (a migração roda no pre-deploy).
+
+---
+
+## 2026-09-11 — FASE 3: kits e retenção de dados
+
+### Decisões do usuário
+
+| Pergunta | Resposta |
+|---|---|
+| Kit Essencial (R$ 0,10 acima do avulso) | Mantido como está |
+| Kit + módulos avulsos, com sugestão do kit mais barato | Pode |
+| Assinatura cancelada | Bloqueia tudo; dados e login guardados por 1 ano (obrigação legal) |
+| Assinatura suspensa | Bloqueada; dados guardados por 2 meses, depois a conta pode ser apagada |
+
+### O que foi feito
+
+| Item | Evidência |
+|---|---|
+| Kits | tabelas `kits`, `kit_modules` e `kit_prices` povoadas pela migração `20260911051529_kits_and_subscription_retention`; `src/domain/billing/kit-catalog.ts` |
+| Orçamento com kit | `quoteKit`: preço do kit + só os módulos fora dele |
+| Sugestão | `suggestKit`: o kit que barateia a mesma seleção, mesmo com módulos a mais; sem economia real, nenhuma |
+| Retenção | `dataRetentionUntil` / `isRetentionExpired` e coluna `subscriptions.suspended_at`; nada é apagado automaticamente |
+
+Sugestões conferidas com os preços reais: módulos do Gestão avulsos (R$ 159,50) → Gestão R$ 129,90; Inteligência sem o Radar (R$ 219,50) → kit completo R$ 199,90; todos os módulos (R$ 638,30) → Complete R$ 399,90; Core + Vencimentos (R$ 69,80) → nenhuma sugestão.
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm lint` / `tsc --noEmit` | ✅ sem erros |
+| `pnpm test` | ✅ 27 arquivos, 332 testes (novos: catálogo de kits, kit + avulsos, sugestão, retenção) |
+| `pnpm test:integration` | ✅ 9 arquivos, 123 testes (novos: kits banco × domínio, preços de kit, CHECKs, orçamentos e sugestões com preços reais) |
+| `pnpm test:e2e` | ✅ 23 testes |
+| `pnpm build` | ✅ |
+
+Verificação em produção: após o merge e o deploy. A migração só acrescenta tabelas, dados de catálogo e uma coluna opcional; nenhuma empresa é afetada.
+
+### Observações
+
+- A exclusão de contas após a retenção não foi implementada: é irreversível e depende de autorização explícita.
+- O prazo de 1 ano após o cancelamento foi citado como exemplo e deve ser confirmado com o jurídico.
+- Uma execução local da integração falhou em `tests/integration/auth/mfa.test.ts` ("falha ao confirmar"), num teste que esta mudança não toca (diff contra `main` vazio nessa área); a execução seguinte passou 123/123. Causa provável: o teste confirma com o código do passo TOTP anterior (`-1`) e falha se o passo de 30 s virar entre gerar o código e o servidor verificar — mais provável com a máquina sob carga. Correção sugerida, ainda não feita: fixar o relógio nesse teste.
