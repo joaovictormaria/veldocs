@@ -91,18 +91,46 @@ Arquivos `.env*` são ignorados pelo Git (exceto `.env.example`). Staging e prod
 | `pnpm db:deploy` | `prisma migrate deploy` (staging/produção) |
 | `pnpm db:status` | status das migrações |
 
+## CI (GitHub Actions)
+
+Workflow [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), executado em todo pull request e em todo push na `main`:
+
+1. `pnpm install --frozen-lockfile`
+2. `pnpm lint`
+3. `pnpm typecheck`
+4. `pnpm test` (unitários)
+5. `pnpm test:integration` (PostgreSQL 17 como service container, banco `veldocs_test`)
+6. `pnpm db:deploy` + `pnpm build`
+7. `pnpm test:e2e` (Playwright contra `pnpm start`)
+
+Segurança do workflow: permissões mínimas (`contents: read`), actions fixadas por SHA de commit, `persist-credentials: false` no checkout e credenciais apenas do Postgres efêmero do CI.
+
+**Proteção da `main`:** branch protection e rulesets não estão disponíveis para repositório privado no plano gratuito do GitHub (a API responde "Upgrade to GitHub Pro"). Até lá, mudanças entram por pull request e o Railway só publica commits da `main` com CI verde (ver abaixo).
+
+## Health check
+
+`GET /api/health` responde `200 {"status":"ok","checks":{"database":"up","migrations":"up"}}` ou `503` com `status: "degraded"`:
+
+| Check | Fica `down` quando |
+|---|---|
+| `database` | a conexão com o PostgreSQL falha ou excede o timeout |
+| `migrations` | há migração do código não aplicada, migração com falha não resolvida ou a tabela `_prisma_migrations` não existe |
+
+A resposta nunca inclui mensagens de erro internas e usa `Cache-Control: no-store`.
+
 ## Deploy (Railway)
 
 | Item | Valor |
 |---|---|
-| Projeto / ambiente | `veldocs` / `production` (workspace Velnox.IA) |
+| Projeto / ambiente | `veldocs` / `production` (workspace Velnox.IA, plano Hobby) |
 | Serviços | `veldocs-app` (aplicação) e `Postgres` (PostgreSQL gerenciado, acesso só pela rede privada) |
-| Origem | GitHub `joaovictormaria/veldocs`, branch `main` (deploy automático a cada push) |
+| Origem | GitHub `joaovictormaria/veldocs`, branch `main` — deploy automático **somente após os checks do GitHub passarem** (gatilho com `checkSuites: true`) |
 | Build | Railpack (Node 24 via `.nvmrc`/`engines`, pnpm via `packageManager`) → `pnpm build` |
 | Pre-deploy | `pnpm db:deploy` (`prisma migrate deploy`) |
 | Start | `pnpm start` (Next.js na porta `PORT=3000`) |
-| Healthcheck | `/api/health`, timeout 120 s |
+| Healthcheck | `/api/health` (banco + migrações), timeout 120 s |
 | Restart | `ON_FAILURE`, até 5 tentativas |
+| Backups do Postgres | ⚠️ **não configurados**: o agendamento de backups do volume foi recusado pela API ("Not Authorized") no plano Hobby; PITR desativado |
 | Domínio | https://veldocs-app-production.up.railway.app |
 
 Variáveis do serviço `veldocs-app` (valores ficam somente no Railway):

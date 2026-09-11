@@ -1,7 +1,7 @@
 # MASTER PROJECT SPECIFICATION
 ## VELDOCS — SaaS de Gestão Documental Empresarial
 
-**Versão:** 0.3
+**Versão:** 0.4
 **Status:** FASE 0 (Produto) e FASE 1 (Fundação técnica) concluídas — FASE 2 não iniciada
 **Produção:** https://veldocs-app-production.up.railway.app (Railway) — código em `joaovictormaria/veldocs` (GitHub, privado)
 **Documento:** Fonte única de verdade do projeto
@@ -1090,7 +1090,7 @@ Objetivo:
 
 ## Unitários
 
-- 🟡 PARCIAL — Serviços: caso de uso de health check (`tests/unit/application/system/check-health.test.ts`, 4 testes — passou). Serviços de negócio ainda não existem.
+- 🟡 PARCIAL — Serviços: caso de uso de health check (`tests/unit/application/system/check-health.test.ts`, 4 testes) e comparação de migrações (`tests/unit/infrastructure/database/compare-migrations.test.ts`, 6 testes) — passou localmente e no CI. Serviços de negócio ainda não existem.
 - [ ] Regras de vencimento
 - [ ] Permissões
 - ✅ CONCLUÍDO — Validadores existentes: ambiente (`tests/unit/infrastructure/config/env.test.ts`, 15 testes) e chave de permissão (`tests/unit/domain/access-control/permission-key.test.ts`, 17 testes) — passou.
@@ -1099,7 +1099,7 @@ Objetivo:
 
 ## Integração
 
-- ✅ CONCLUÍDO — Banco: conexão, migrações, tabelas, `company_id`, FKs cross-tenant, unicidade, CHECKs, trigger append-only e health probe (`tests/integration/database/`, 36 testes — passou).
+- ✅ CONCLUÍDO — Banco: conexão, migrações, tabelas, `company_id`, FKs cross-tenant, unicidade, CHECKs, trigger append-only e health probes de banco e de migrações (`tests/integration/database/`, 39 testes — passou localmente e no CI).
 - [ ] Storage
 - [ ] Auth
 - [ ] API
@@ -1107,7 +1107,7 @@ Objetivo:
 
 ## E2E
 
-- 🟡 PARCIAL — Fundação: página inicial, `/api/health` (aplicação + banco) e ausência de `X-Powered-By` (`tests/e2e/foundation.spec.ts`, 3 testes — passou com `pnpm dev` e com `pnpm start`).
+- 🟡 PARCIAL — Fundação: página inicial, `/api/health` (aplicação + banco + migrações) e ausência de `X-Powered-By` (`tests/e2e/foundation.spec.ts`, 3 testes — passou com `pnpm dev`, com `pnpm start` e no CI).
 - [ ] Cadastro
 - [ ] Login
 - [ ] Documento
@@ -1150,20 +1150,21 @@ Objetivo:
 
 # 31. CI/CD E SUPPLY CHAIN
 
-> Scripts locais existem e passam. Repositório remoto: GitHub `joaovictormaria/veldocs` (privado), com deploy automático no Railway a cada push em `main`. **Não há pipeline de CI**: hoje o deploy não é bloqueado por lint ou testes.
+> Pipeline de CI no GitHub Actions (`.github/workflows/ci.yml`) em todo pull request e em todo push na `main`. O Railway só publica commits da `main` depois que os checks do GitHub passam (gatilho de deploy com `checkSuites: true`). Primeira execução verde: run `34544523969` (PR #1, 2026-09-10).
 
-- 🟡 PARCIAL — Lint (`pnpm lint` local — 0 erros/avisos; sem CI)
-- 🟡 PARCIAL — Type checking (`pnpm typecheck` local — 0 erros; sem CI)
-- 🟡 PARCIAL — Testes unitários (`pnpm test` local — 40 passaram; sem CI)
-- 🟡 PARCIAL — Testes de integração (`pnpm test:integration` local — 36 passaram; sem CI)
-- 🟡 PARCIAL — E2E (`pnpm test:e2e` local — 3 passaram; modo CI já configurado com `pnpm start`; sem pipeline)
+- ✅ CONCLUÍDO — Lint (etapa `pnpm lint` do CI — passou no run `34544523969`)
+- ✅ CONCLUÍDO — Type checking (etapa `pnpm typecheck` do CI — passou)
+- ✅ CONCLUÍDO — Testes unitários (etapa `pnpm test` do CI — 46 passaram)
+- ✅ CONCLUÍDO — Testes de integração (etapa `pnpm test:integration` do CI, PostgreSQL 17 como service container — 39 passaram)
+- ✅ CONCLUÍDO — E2E (etapa `pnpm test:e2e` do CI contra `pnpm start` — 3 passaram)
+- ✅ CONCLUÍDO — Entrega bloqueada sem CI verde (Railway `checkSuites: true`, confirmado via API; ver registro de 2026-09-10 — CI e endurecimento do deploy)
 - 🔴 NÃO IMPLEMENTADO — SAST
 - 🔴 NÃO IMPLEMENTADO — SCA/dependency scanning
 - 🔴 NÃO IMPLEMENTADO — Secret scanning
 - 🔴 NÃO IMPLEMENTADO — SBOM
 - ✅ CONCLUÍDO — Lockfile (`pnpm-lock.yaml`; `pnpm install --frozen-lockfile` — sucesso)
 - 🔴 NÃO IMPLEMENTADO — Imagens de container escaneadas, quando aplicável (não há imagem própria)
-- 🔴 NÃO IMPLEMENTADO — Branch protection (repositório existe; proteção da `main` não configurada)
+- ⏳ BLOQUEADO — Branch protection: indisponível para repositório privado no plano gratuito do GitHub (API: "Upgrade to GitHub Pro or make this repository public"). Mitigação atual: mudanças por pull request e Railway publicando só com CI verde.
 - 🔴 NÃO IMPLEMENTADO — Revisão de código
 - 🟡 PARCIAL — Ambientes separados (development local e production no Railway; staging não provisionado)
 
@@ -1171,7 +1172,7 @@ Objetivo:
 
 # 32. BACKUP E RECOVERY
 
-- [ ] Backup automático
+- ⏳ BLOQUEADO — Backup automático: o agendamento de backups do volume do PostgreSQL de produção foi recusado pela API do Railway ("Not Authorized") no plano Hobby; PITR desativado. Requer decisão: plano Pro no Railway ou rotina de dump para storage externo.
 - [ ] Backup criptografado
 - [ ] Retenção definida
 - [ ] Estratégia de restore
@@ -1642,7 +1643,7 @@ Registrar aqui decisões importantes.
 
 **Evidência:** deploy `4f8d54ab` (commit `6dd399d`) — SUCCESS; o pre-deploy aplicou `20260910225812_init_base_entities` no banco de produção; `GET /api/health` → HTTP 200 `{"status":"ok","checks":{"database":"up"}}`. Configuração documentada em `docs/architecture/fundacao-tecnica.md`.
 
-**Pendências:** as configurações de deploy (pre-deploy, start, healthcheck, restart) foram aplicadas pela API do Railway e não estão versionadas — migrar para `.railway/railway.ts` declarando também variáveis e origem do repositório; ambiente de staging; CI antes do deploy; backups do PostgreSQL de produção.
+**Pendências:** as configurações de deploy (pre-deploy, start, healthcheck, restart, espera do CI) foram aplicadas pela API do Railway e não estão versionadas — migrar para `.railway/railway.ts` declarando também variáveis e origem do repositório; ambiente de staging; backups do PostgreSQL de produção (⏳ bloqueado no plano Hobby). CI antes do deploy: ✅ concluído em 2026-09-10.
 
 ---
 
@@ -1661,20 +1662,20 @@ WhatsApp:       🔴 NÃO IMPLEMENTADO  (apenas interface)
 IA:             🔴 NÃO IMPLEMENTADO  (apenas interface)
 Billing:        🔴 NÃO IMPLEMENTADO
 Observabilidade:🔴 NÃO IMPLEMENTADO  (apenas /api/health)
-Deploy:         🟡 PARCIAL           (production no Railway com migrações no pre-deploy e healthcheck; sem staging, CI ou backup configurado)
+Deploy:         🟡 PARCIAL           (production no Railway; publica só com CI verde; migrações no pre-deploy; health com banco e migrações; sem staging e sem backup)
 ```
 
 ## Bloqueadores
 
 - Nenhum bloqueador técnico para iniciar a FASE 2.
 - Decisões pendentes (não bloqueiam a FASE 2): DEC-005 (usuário multiempresa — decidir antes da FASE 4), unicidade de CNPJ entre empresas, retenção de `audit_logs` × LGPD, adoção de RLS.
-- Pendências de infraestrutura (não bloqueiam a FASE 2): CI bloqueando o deploy automático, branch protection, backups do PostgreSQL de produção, ambiente de staging, configuração do Railway versionada como Infrastructure as Code.
+- Pendências de infraestrutura (não bloqueiam a FASE 2): backups do PostgreSQL de produção (⏳ exige plano Pro no Railway ou dump externo), branch protection (⏳ exige GitHub Pro ou repositório público), ambiente de staging, configuração do Railway versionada como Infrastructure as Code.
 
 ## Última auditoria
 
 **Data:** 2026-09-10
-**Responsável:** Claude Code (auditoria FASE 0 + FASE 1 + deploy inicial)
-**Versão:** 0.3
+**Responsável:** Claude Code (auditoria FASE 0 + FASE 1 + deploy inicial + CI)
+**Versão:** 0.4
 
 ---
 
@@ -1784,3 +1785,36 @@ Autorizado pelo usuário nesta data.
 - Backups e política de retenção do PostgreSQL de produção.
 - Ambiente de staging.
 - Configuração do Railway versionada (`.railway/railway.ts` completo).
+
+## 2026-09-10 — CI e endurecimento do deploy
+
+Autorizado pelo usuário nesta data (passo "blindar o deploy" antes da FASE 2).
+
+### O que foi feito
+
+| Item | Resultado |
+|---|---|
+| CI | `.github/workflows/ci.yml`: install congelado, lint, typecheck, unitários, integração com PostgreSQL 17, migrações, build e E2E contra `pnpm start`; `permissions: contents: read`; actions fixadas por SHA (`actions/checkout` v7.0.1, `pnpm/action-setup` v6.1.0, `actions/setup-node` v7.0.0); `persist-credentials: false` |
+| Pull request | #1 `CI e verificação de migrações no health check` — CI run `34544523969` verde; squash merge como `737af20` |
+| Railway espera o CI | gatilho de deploy `4b87d6c8…` atualizado para `checkSuites: true` (confirmado por releitura via API) |
+| Health check | `src/infrastructure/database/migrations-health-probe.ts`: `migrations` fica `down` com migração pendente, com falha não resolvida ou sem `_prisma_migrations`; `/api/health` agora verifica `database` e `migrations` |
+| Branch protection | ⏳ bloqueado: API do GitHub responde "Upgrade to GitHub Pro or make this repository public" (branch protection e rulesets) |
+| Backups do PostgreSQL | ⏳ bloqueado: `volumeInstanceBackupScheduleUpdate` (DAILY, WEEKLY, MONTHLY) recusado com "Not Authorized"; workspace no plano `HOBBY`; lista de agendamentos continua vazia |
+
+### Testes
+
+| Onde | Resultado |
+|---|---|
+| Local | `pnpm check` — 46 unitários; `pnpm test:integration` — 39; `pnpm build` — sucesso; `pnpm test:e2e` — 3 |
+| CI (run `34544523969`) | todas as etapas com sucesso; 46 unitários, 39 integração, 3 E2E |
+
+### Verificação em produção
+
+| Verificação | Resultado |
+|---|---|
+| CI na `main` (run `34544777947`, commit `737af20`) | ✅ sucesso (2026-09-11 00:02:39 → 00:04:34 UTC) |
+| Railway esperou o CI | ✅ deploy `cd3c1d51` em `WAITING` enquanto o CI rodava (00:03:21 UTC); passou a `INITIALIZING` só às 00:04:37, três segundos após o CI concluir |
+| Deploy `cd3c1d51` | ✅ `BUILDING` → `DEPLOYING` → `SUCCESS` (00:06:32 UTC) |
+| Pre-deploy | ✅ "No pending migrations to apply." |
+| `GET /api/health` | ✅ HTTP 200 `{"status":"ok","checks":{"database":"up","migrations":"up"}}`, `Cache-Control: no-store` |
+| `GET /` | ✅ HTTP 200 |
