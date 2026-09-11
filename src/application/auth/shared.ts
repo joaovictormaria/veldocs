@@ -32,6 +32,11 @@ export const AUTH_AUDIT_ACTIONS = {
   logout: "auth.logout",
   logoutAll: "auth.logout_all",
   activeCompanySelected: "auth.active_company_selected",
+  mfaEnrollmentStarted: "auth.mfa_enrollment_started",
+  mfaEnabled: "auth.mfa_enabled",
+  mfaVerified: "auth.mfa_verified",
+  mfaFailed: "auth.mfa_failed",
+  mfaRateLimited: "auth.mfa_rate_limited",
 } as const;
 
 export function ipRateLimitKey(scope: string, context: RequestContext): string {

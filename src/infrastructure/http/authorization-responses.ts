@@ -14,6 +14,16 @@ const RESPONSES: Record<AuthorizationFailure, { status: number; error: string; m
     error: "module_not_enabled",
     message: "Este recurso não está ativo no plano da empresa.",
   },
+  mfa_enrollment_required: {
+    status: 403,
+    error: "mfa_enrollment_required",
+    message: "Seu perfil exige verificação em duas etapas. Configure o app autenticador.",
+  },
+  mfa_required: {
+    status: 403,
+    error: "mfa_required",
+    message: "Confirme o código do app autenticador para continuar.",
+  },
 };
 
 export function authorizationFailureResponse(reason: AuthorizationFailure) {

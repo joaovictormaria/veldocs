@@ -611,7 +611,10 @@ Referências principais:
 - ✅ CONCLUÍDO — Hash de senha no backend: Argon2id (19 MiB, t=2, p=1), mínimo 12 e máximo 128 caracteres. Teste: prefixo `$argon2id$v=19$m=19456,t=2,p=1$` — passou.
 - ⏳ BLOQUEADO — Recuperação segura de senha (Resend escolhido; depende do domínio verificado e da chave de API).
 - ✅ CONCLUÍDO — Rate limit de autenticação: login 30/15 min por IP e 10/15 min por conta (HMAC do identificador); cadastro 10/h por IP. Testes: bloqueio após 10 tentativas e contagem concorrente — passaram.
-- 🔴 NÃO IMPLEMENTADO — MFA (decidido: TOTP + códigos de recuperação para OWNER/ADMIN; `sessions.mfa_verified_at` já existe).
+- ✅ CONCLUÍDO — MFA: TOTP (RFC 6238) obrigatório para OWNER e ADMIN, com 10 códigos de recuperação de uso único.
+  - Evidência: `src/infrastructure/security/totp.ts` (implementação própria para impedir reuso do mesmo código), `src/application/auth/mfa.ts`, rotas `/api/auth/mfa/*`; segredo cifrado (AES-256-GCM) e códigos só como HMAC-SHA256.
+  - Testes: unitários com os vetores oficiais da RFC 6238 e replay; integração (cadastro, confirmação, verificação, código de recuperação de uso único, limite de tentativas, segredo cifrado no banco); E2E (OWNER bloqueado até configurar) — passaram em 2026-09-11.
+  - Pendente: desativar/recadastrar o segundo fator e gerar novos códigos de recuperação.
 - ⏳ BLOQUEADO — Verificação de e-mail (coluna `users.email_verified_at` existe; Resend escolhido, depende do domínio verificado e da chave de API).
 - ✅ CONCLUÍDO — Logout de sessões: `POST /api/auth/logout` e `POST /api/auth/logout-all` (integração + E2E — passaram).
 
@@ -625,7 +628,7 @@ Referências principais:
 
 ## 7.3 Autorização
 
-> Cadeia implementada em `src/application/access/authorize.ts`: sessão → pessoa ativa → empresa ativa → vínculo ACTIVE em empresa ACTIVE → permissão → entitlement do módulo → recurso. Detalhes em `docs/architecture/fundacao-tecnica.md`.
+> Cadeia implementada em `src/application/access/authorize.ts`: sessão → pessoa ativa → empresa ativa → vínculo ACTIVE em empresa ACTIVE → segundo fator (quando o perfil exige) → permissão → entitlement do módulo → recurso. Detalhes em `docs/architecture/fundacao-tecnica.md`.
 
 - ✅ CONCLUÍDO — RBAC: permissões calculadas pela união dos perfis do vínculo, verificadas a cada requisição.
   - Testes: unit `tests/unit/application/access/authorize-and-select.test.ts`; integração `tests/integration/access/access-control.test.ts` (VISUALIZADOR lê a empresa mas recebe `forbidden` em membros) — passaram.
@@ -1054,7 +1057,7 @@ Tipos:
 
 Registrar, quando aplicável:
 
-> **Status (2026-09-11):** 🟡 PARCIAL — `audit_logs` é append-only (UPDATE/DELETE bloqueados por trigger). ✅ Registrados: `auth.account_registered`, `company.created`, `auth.login_succeeded`, `auth.login_failed`, `auth.login_rate_limited`, `auth.register_rate_limited`, `auth.logout`, `auth.logout_all`, `auth.active_company_selected` (integração — passou). Os demais eventos abaixo ainda não existem.
+> **Status (2026-09-11):** 🟡 PARCIAL — `audit_logs` é append-only (UPDATE/DELETE bloqueados por trigger). ✅ Registrados: `auth.account_registered`, `company.created`, `auth.login_succeeded`, `auth.login_failed`, `auth.login_rate_limited`, `auth.register_rate_limited`, `auth.logout`, `auth.logout_all`, `auth.active_company_selected`, `auth.mfa_enrollment_started`, `auth.mfa_enabled`, `auth.mfa_verified`, `auth.mfa_failed`, `auth.mfa_rate_limited` (integração — passou). Os demais eventos abaixo ainda não existem.
 
 - login/logout;
 - upload;
@@ -1077,7 +1080,7 @@ Registrar, quando aplicável:
 
 ## 16.1 Unitários
 
-> Suíte atual: 14 arquivos, 178 testes — passaram (local, 2026-09-11; CI no PR da FASE 2 parte 2).
+> Suíte atual: 18 arquivos, 232 testes — passaram (local, 2026-09-11).
 
 - 🟡 PARCIAL — Regras de negócio (identidade: CPF, e-mail, senha, identificador de login; catálogo de perfis; gestor de sessão; login e cadastro; ambiente; health check; fronteiras de arquitetura)
 - 🔴 NÃO IMPLEMENTADO — Cálculo de preço modular
@@ -1087,10 +1090,10 @@ Registrar, quando aplicável:
 
 ## 16.2 Integração
 
-> Suíte atual: 5 arquivos, 69 testes com PostgreSQL real — passaram (local e CI).
+> Suíte atual: 6 arquivos, 74 testes com PostgreSQL real — passaram (local e CI).
 
 - ✅ CONCLUÍDO — Banco (conexão, migrações, tabelas, FKs cross-tenant, unicidade, CHECKs, trigger append-only, health probes)
-- ✅ CONCLUÍDO — Auth (`tests/integration/auth/auth-services.test.ts`, 13 testes)
+- ✅ CONCLUÍDO — Auth (`tests/integration/auth/auth-services.test.ts`, 13 testes; `tests/integration/auth/mfa.test.ts`, segundo fator ponta a ponta)
 - ✅ CONCLUÍDO — RBAC (`tests/integration/access/access-control.test.ts`: provisionamento, união de perfis, perfil sem permissão, vínculo e empresa suspensos)
 - ✅ CONCLUÍDO — Multi-tenancy (nível banco + empresa ativa, pessoa multiempresa, seleção de empresa sem vínculo e consultas sem vazamento entre empresas)
 - 🔴 NÃO IMPLEMENTADO — Documentos (apenas constraints da tabela)
@@ -1099,7 +1102,7 @@ Registrar, quando aplicável:
 
 ## 16.3 E2E
 
-> Suíte atual: 12 testes Playwright — passaram (local; CI roda contra `pnpm start`).
+> Suíte atual: 15 testes Playwright — passaram (local; CI roda contra `pnpm start`).
 
 - ✅ CONCLUÍDO — Cadastro (`tests/e2e/auth.spec.ts`: cookie HttpOnly/SameSite, sessão, login por CPF, logout, credenciais inválidas, origem e JSON obrigatórios)
 - 🔴 NÃO IMPLEMENTADO — Builder
@@ -1264,7 +1267,7 @@ As recomendações devem ser:
 
 ## FASE 2 — Segurança base
 
-**Status da fase:** 🟡 PARCIAL — parte 1 (identidade multiempresa, cadastro, login e sessão) em produção desde 2026-09-11; parte 2 (empresa ativa e autorização nas rotas) implementada em 2026-09-11. Pendentes: MFA, verificação de e-mail, recuperação de senha, link mágico, Google, CSP/HSTS, logs e rate limiting nas rotas de negócio.
+**Status da fase:** 🟡 PARCIAL — parte 1 (identidade multiempresa, cadastro, login e sessão), parte 2 (empresa ativa e autorização nas rotas) e parte 3 (segundo fator obrigatório para OWNER/ADMIN) implementadas em 2026-09-11. Pendentes: verificação de e-mail, recuperação de senha, link mágico, Google, CSP/HSTS, logs estruturados e rate limiting nas rotas de negócio.
 
 - 🟡 PARCIAL — Autenticação (ver 7.1)
 - ✅ CONCLUÍDO — Sessão (ver 7.2)
@@ -1555,13 +1558,23 @@ Motivo: integração simples com Node.js/Next.js e plano inicial adequado ao MVP
 
 Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3D5AFE` (azul principal), `#2541B2` (azul escuro) e `#00E5FF` (ciano); logo e ícone em `public/brand/` e `src/app/`. Evidência: `docs/brand/identidade-visual.md`, `tests/unit/presentation/brand.test.ts` e E2E da página inicial. Pendência: arquivos vetoriais originais.
 
+## DEC-020 — Segundo fator próprio (TOTP) obrigatório para OWNER/ADMIN
+
+**Status:** ✅ CONCLUÍDO (decisão do usuário em 2026-09-11; implementado na FASE 2)
+
+**Decisão:** app autenticador (TOTP, RFC 6238) com códigos de recuperação, exigido de OWNER e ADMIN em toda requisição autorizada; confirmação válida por sessão.
+
+**Motivo da implementação própria:** as bibliotecas avaliadas verificam o código mas não informam qual passo de tempo foi aceito, o que impede bloquear a reapresentação do mesmo código dentro da janela de validade. A implementação usa apenas o HMAC do Node e é validada contra os vetores oficiais da RFC 6238.
+
+**Evidência:** `src/infrastructure/security/totp.ts`, `src/application/auth/mfa.ts`, migração `mfa_totp_recovery_codes`; testes unitários, de integração e E2E — passaram.
+
 ---
 
 # 24. STATUS GERAL
 
 **Produto:** ✅ CONCLUÍDO (definição e identidade visual; vetores da logo pendentes)
 **Arquitetura:** ✅ CONCLUÍDO (monólito modular em camadas; entitlements ainda não existem)
-**Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit e CSRF nas rotas de auth; empresa ativa e RBAC nas rotas; MFA, CSP/HSTS e logs pendentes)
+**Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit, CSRF, empresa ativa, RBAC nas rotas e MFA obrigatório para OWNER/ADMIN; CSP/HSTS, logs e verificação de e-mail pendentes)
 **Frontend:** 🔴 NÃO IMPLEMENTADO (somente página inicial da fundação)
 **Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização e consultas da empresa e dos membros; sem módulos de negócio)
 **Banco:** 🟡 PARCIAL (entidades de identidade, empresa, acesso, documentos e auditoria; faltam Module, ModulePrice, Entitlement, Subscription e Trial)
@@ -1569,7 +1582,7 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 **Billing:** 🔴 NÃO IMPLEMENTADO
 **WhatsApp:** 🔴 NÃO IMPLEMENTADO
 **IA:** 🔴 NÃO IMPLEMENTADO
-**Testes:** 🟡 PARCIAL (178 unitários, 69 integração, 12 E2E; CI bloqueando o deploy)
+**Testes:** 🟡 PARCIAL (232 unitários, 74 integração, 15 E2E; CI bloqueando o deploy)
 
 ## Bloqueadores
 
@@ -1678,3 +1691,31 @@ Verificação em produção: após o merge e o deploy desta mudança.
 | Chaves `APP_ENCRYPTION_KEY`/`APP_HMAC_KEY` | cópia fora do Railway continua pendente com o usuário (valores nunca exibidos nesta sessão) |
 
 Observação: o PDF da marca contém uma única imagem raster (1536 × 1024); os arquivos do projeto são recortes dela. Substituir por vetores (SVG) quando disponíveis.
+
+## 2026-09-11 — FASE 2 (parte 3): segundo fator obrigatório para OWNER/ADMIN
+
+### O que foi feito
+
+| Item | Evidência |
+|---|---|
+| TOTP próprio | `src/infrastructure/security/totp.ts` (RFC 6238; devolve o passo aceito para impedir replay) |
+| Casos de uso | `src/application/auth/mfa.ts`: iniciar cadastro, confirmar (entrega 10 códigos de recuperação) e verificar (app ou código de recuperação) |
+| Banco | migração `mfa_totp_recovery_codes`: `user_totp_credentials` (segredo cifrado, confirmação, último passo) e `user_recovery_codes` (HMAC-SHA256, uso único), com CHECKs de formato |
+| Autorização | perfis OWNER/ADMIN recebem `mfa_enrollment_required` sem cadastro e `mfa_required` sem confirmação na sessão |
+| Rotas | `POST /api/auth/mfa/enroll`, `/enroll/confirm` e `/verify`; `GET /api/auth/session` passa a devolver `mfa` |
+| Limite | 10 tentativas por pessoa a cada 15 minutos |
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm test` | ✅ 18 arquivos, 232 testes (novos: vetores oficiais da RFC 6238, replay, política de MFA, códigos de recuperação, casos de uso) |
+| `pnpm test:integration` | ✅ 6 arquivos, 74 testes (novos: cadastro e confirmação, segredo cifrado no banco, replay, código de recuperação de uso único, MFA por sessão, limite de tentativas) |
+| `pnpm test:e2e` | ✅ 15 testes (novos: OWNER bloqueado até configurar o app autenticador; código inválido e reuso recusados) |
+
+Verificação em produção: após o merge e o deploy.
+
+### Observações
+
+- Erros encontrados nos próprios testes durante o desenvolvimento (corrigidos): códigos de recuperação falsos com caracteres fora do alfabeto base32; testes que reapresentavam o mesmo código do app (o sistema recusou corretamente); URI do app autenticador comparada sem decodificar; lista de tabelas dependendo da ordenação do banco.
+- Pendente: desativar/recadastrar o segundo fator e gerar novos códigos de recuperação (exigirá reautenticação por senha).

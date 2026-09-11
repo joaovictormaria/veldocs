@@ -12,5 +12,6 @@ export async function GET() {
     user: current.user,
     activeCompanyId: current.session.activeCompanyId,
     memberships: current.memberships,
+    mfa: current.mfa,
   });
 }

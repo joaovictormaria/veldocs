@@ -36,6 +36,8 @@ test("cadastro inicia sessão com cookie HttpOnly e SameSite=Lax", async ({ requ
     user: { id: body.userId, name: account.name, email: account.email },
     activeCompanyId: body.companyId,
     memberships: [{ companyId: body.companyId, companyName: account.companyName, status: "ACTIVE", roleKeys: ["OWNER"] }],
+    // OWNER exige segundo fator, ainda não configurado logo após o cadastro.
+    mfa: { required: true, configured: false, verified: false },
   });
 });
 

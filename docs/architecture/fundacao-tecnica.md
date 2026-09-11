@@ -172,6 +172,9 @@ As configurações de deploy (pre-deploy, start, healthcheck, restart) estão ap
 | `GET /api/company` | empresa ativa (`company.read`) | `200`, `401`, `403` |
 | `GET /api/company/members` | membros da empresa ativa (`members.read`) | `200`, `401`, `403` |
 | `GET /api/company/members/[userId]` | um membro da empresa ativa (`members.read`) | `200`, `401`, `403`, `404` (idêntico para outra empresa, inexistente ou id inválido) |
+| `POST /api/auth/mfa/enroll` | inicia o cadastro do app autenticador (devolve segredo e URI do QR Code) | `200`, `401`, `409 mfa_already_enabled` |
+| `POST /api/auth/mfa/enroll/confirm` | confirma com um código e entrega os códigos de recuperação | `200`, `400 invalid_code`, `401`, `409`, `429` |
+| `POST /api/auth/mfa/verify` | confirma o segundo fator na sessão (código do app ou de recuperação) | `200`, `400`, `401 invalid_code`, `409 mfa_not_configured`, `429` |
 
 Rotas que alteram estado exigem `Origin` igual a `APP_URL` (ou `Sec-Fetch-Site: same-origin`) e corpo `application/json` de até 16 KB.
 
@@ -200,7 +203,8 @@ Toda rota de negócio chama `authorizeRequest(permissão)` (`src/infrastructure/
 
 ```text
 sessão válida → pessoa ativa → empresa ativa na sessão → vínculo ACTIVE em empresa ACTIVE
-  → permissão do perfil (união dos perfis do vínculo) → entitlement do módulo da permissão → recurso
+  → segundo fator (quando o perfil exige) → permissão do perfil (união dos perfis do vínculo)
+  → entitlement do módulo da permissão → recurso
 ```
 
 | Falha | Resposta |
@@ -208,6 +212,8 @@ sessão válida → pessoa ativa → empresa ativa na sessão → vínculo ACTIV
 | sem sessão / sessão inválida / pessoa desativada | `401 unauthenticated` |
 | sessão sem empresa ativa (pessoa com mais de um vínculo) | `403 active_company_required` |
 | sem vínculo ativo, empresa suspensa ou permissão ausente | `403 forbidden` |
+| perfil exige segundo fator e a pessoa ainda não o configurou | `403 mfa_enrollment_required` |
+| perfil exige segundo fator e a sessão ainda não o confirmou | `403 mfa_required` |
 | módulo da permissão não ativo para a empresa | `403 module_not_enabled` |
 
 - A empresa vem **sempre** da sessão (`context.companyId`); nenhuma rota aceita empresa por parâmetro. As consultas (`src/application/access/company-queries.ts`) só recebem um `AuthorizedContext`.
@@ -216,9 +222,24 @@ sessão válida → pessoa ativa → empresa ativa na sessão → vínculo ACTIV
 - **Entitlements:** cada permissão pertence a um módulo (`src/domain/access-control/permission-modules.ts`); hoje todas são do Core. A implementação provisória `createCoreOnlyEntitlementService` considera o Core sempre ativo e nega os demais módulos, até a FASE 3 criar o catálogo e os módulos contratados por empresa.
 - Troca de empresa ativa auditada como `auth.active_company_selected`.
 
+### Segundo fator (MFA)
+
+Obrigatório para os perfis **OWNER** e **ADMIN** (`src/domain/access-control/mfa-policy.ts`). Quem tem esses perfis na empresa ativa não acessa nenhuma rota antes de configurar e confirmar o app autenticador.
+
+- **Padrão:** TOTP da RFC 6238 — HMAC-SHA1, 6 dígitos, janela de 30 s e tolerância de um passo para cada lado. Compatível com Google Authenticator, Microsoft Authenticator e 1Password.
+- **Implementação própria** (`src/infrastructure/security/totp.ts`): a verificação devolve o passo de tempo aceito, e o passo é gravado em `user_totp_credentials.last_used_step` — o mesmo código não vale duas vezes (replay).
+- **Segredo:** gerado com 160 bits, guardado cifrado (AES-256-GCM, contexto `users.totp_secret`) e só válido depois da confirmação.
+- **Códigos de recuperação:** 10 códigos de 10 caracteres base32, exibidos uma única vez, guardados apenas como HMAC-SHA256 e válidos uma vez cada.
+- **Escopo da confirmação:** por sessão (`sessions.mfa_verified_at`). Cada login novo precisa confirmar de novo.
+- **Limite:** 10 tentativas por pessoa a cada 15 minutos (confirmação e verificação).
+- **Auditoria:** `auth.mfa_enrollment_started`, `auth.mfa_enabled`, `auth.mfa_verified`, `auth.mfa_failed`, `auth.mfa_rate_limited`.
+- **Estado na sessão:** `GET /api/auth/session` devolve `mfa: { required, configured, verified }`.
+
+Pendente: desativar/recadastrar o segundo fator (exigirá reautenticação por senha) e gerar novos códigos de recuperação.
+
 ### Pendente na FASE 2
 
-MFA obrigatório para OWNER/ADMIN (app autenticador + códigos de recuperação); verificação de e-mail (obrigatória no MASTER SPEC v0.2), link mágico e recuperação de senha (serviço de e-mail a definir); login com Google; headers de segurança (CSP, HSTS) e logs estruturados; rate limiting nas rotas de negócio; rotação de chaves.
+Verificação de e-mail (obrigatória no MASTER SPEC v0.2), link mágico e recuperação de senha (Resend, aguardando domínio e chave); login com Google; headers de segurança (CSP, HSTS) e logs estruturados; rate limiting nas rotas de negócio; rotação de chaves.
 
 Com o modelo modular (MASTER SPEC v0.2), o cadastro deverá levar ao **VELDOCS Builder** e o trial de 14 dias começará após a escolha dos módulos — isso pertence à FASE 3 (catálogo de módulos, entitlements, Builder, preço e trial).
 

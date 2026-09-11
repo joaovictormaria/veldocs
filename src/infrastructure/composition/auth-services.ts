@@ -3,6 +3,7 @@ import { createAuthorizer } from "@/application/access/authorize";
 import { createCompanyQueries } from "@/application/access/company-queries";
 import { createSelectActiveCompany } from "@/application/access/select-active-company";
 import { createLoginUseCase } from "@/application/auth/login";
+import { createMfaUseCases } from "@/application/auth/mfa";
 import { createRegisterUseCase } from "@/application/auth/register";
 import { createSessionManager } from "@/application/auth/session-manager";
 import { createSessionUseCases } from "@/application/auth/session-use-cases";
@@ -14,11 +15,13 @@ import {
   createPrismaCompanyDirectory,
 } from "@/infrastructure/database/prisma-access-control-repository";
 import { createPrismaAuditLogger } from "@/infrastructure/database/prisma-audit-logger";
+import { createPrismaMfaRepository } from "@/infrastructure/database/prisma-mfa-repository";
 import { getPrismaClient } from "@/infrastructure/database/prisma-client";
 import { createPrismaIdentityRepository } from "@/infrastructure/database/prisma-identity-repository";
 import { createPrismaRateLimiter } from "@/infrastructure/database/prisma-rate-limiter";
 import { createPrismaSessionRepository } from "@/infrastructure/database/prisma-session-repository";
 import { createArgon2PasswordHasher } from "@/infrastructure/security/argon2-password-hasher";
+import { createMfaService } from "@/infrastructure/security/mfa-service";
 import {
   type ApplicationKeys,
   createSensitiveDataProtector,
@@ -46,14 +49,22 @@ export function buildAuthServices(prisma: PrismaClient, keys: ApplicationKeys, n
   };
 
   const access = createPrismaAccessControlRepository(prisma);
+  const mfa = createPrismaMfaRepository(prisma, keys);
 
   return {
     login: createLoginUseCase(dependencies),
     register: createRegisterUseCase({ ...dependencies, randomSlugSuffix: generateSlugSuffix }),
-    ...createSessionUseCases({ sessions, identity, audit }),
-    authorize: createAuthorizer({ sessions, identity, access, entitlements: createCoreOnlyEntitlementService() }),
+    ...createSessionUseCases({ sessions, identity, access, mfa, audit }),
+    authorize: createAuthorizer({
+      sessions,
+      identity,
+      access,
+      mfa,
+      entitlements: createCoreOnlyEntitlementService(),
+    }),
     selectActiveCompany: createSelectActiveCompany({ sessions, identity, access, audit }),
     company: createCompanyQueries(createPrismaCompanyDirectory(prisma)),
+    mfa: createMfaUseCases({ ...dependencies, mfa, service: createMfaService() }),
   };
 }
 

@@ -126,11 +126,45 @@ model User {
   updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt       DateTime?  @map("deleted_at") @db.Timestamptz(3)
 
-  memberships Membership[]
-  sessions    Session[]
-  auditLogs   AuditLog[]
+  memberships    Membership[]
+  sessions       Session[]
+  auditLogs      AuditLog[]
+  totpCredential UserTotpCredential?
+  recoveryCodes  UserRecoveryCode[]
 
   @@map("users")
+}
+
+/// Segundo fator por app autenticador (TOTP). O segredo é cifrado
+/// (AES-256-GCM, contexto `users.totp_secret`) e só vale após confirmação.
+model UserTotpCredential {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  userId          String    @unique @map("user_id") @db.Uuid
+  secretEncrypted String    @map("secret_encrypted") @db.VarChar(255)
+  /// Nulo enquanto a pessoa não confirma um código válido.
+  confirmedAt     DateTime? @map("confirmed_at") @db.Timestamptz(3)
+  /// Último passo de tempo aceito: impede reutilizar o mesmo código.
+  lastUsedStep    Int?      @map("last_used_step")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_totp_credentials")
+}
+
+/// Códigos de recuperação de uso único, guardados apenas como HMAC-SHA256.
+model UserRecoveryCode {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  codeHash  String    @unique @map("code_hash") @db.VarChar(64)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_recovery_codes")
 }
 
 /// Vínculo de uma pessoa com uma empresa. Status e perfis são por empresa.

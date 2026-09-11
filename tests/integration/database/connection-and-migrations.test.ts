@@ -25,9 +25,11 @@ const APPLICATION_TABLES = [
   "role_permissions",
   "roles",
   "sessions",
+  "user_recovery_codes",
   "user_roles",
+  "user_totp_credentials",
   "users",
-];
+].sort();
 
 /** Tabelas de dados empresariais: company_id obrigatório. */
 const TENANT_SCOPED_TABLES = [
@@ -75,10 +77,10 @@ describe("conexão e migrações", () => {
     const rows = await prisma.$queryRaw<Array<{ table_name: string }>>`
       SELECT table_name FROM information_schema.tables
       WHERE table_schema = 'public' AND table_type = 'BASE TABLE' AND table_name <> '_prisma_migrations'
-      ORDER BY table_name
     `;
 
-    expect(rows.map((row) => row.table_name)).toEqual(APPLICATION_TABLES);
+    // Ordenado no teste: a ordenação do banco depende da configuração de idioma.
+    expect(rows.map((row) => row.table_name).sort()).toEqual(APPLICATION_TABLES);
   });
 
   it("toda tabela de dados empresariais possui company_id obrigatório e users não pertence a empresa", async () => {

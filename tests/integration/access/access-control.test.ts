@@ -7,10 +7,17 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import type { AuthServices } from "@/infrastructure/composition/auth-services";
 import { createPrismaAccessControlRepository } from "@/infrastructure/database/prisma-access-control-repository";
 import { createPrismaIdentityRepository } from "@/infrastructure/database/prisma-identity-repository";
+import { createPrismaMfaRepository } from "@/infrastructure/database/prisma-mfa-repository";
 import { createPrismaSessionRepository } from "@/infrastructure/database/prisma-session-repository";
 import { createArgon2PasswordHasher } from "@/infrastructure/security/argon2-password-hasher";
 import { createTokenService } from "@/infrastructure/security/token-service";
-import { createTestAuthServices, createTestPrismaClient, truncateAllTables } from "../support/database";
+import { totpCode, totpStep } from "@/infrastructure/security/totp";
+import {
+  TEST_APPLICATION_KEYS,
+  createTestAuthServices,
+  createTestPrismaClient,
+  truncateAllTables,
+} from "../support/database";
 
 const PASSWORD = "uma frase longa e secreta";
 const context = { ipAddress: "203.0.113.20", userAgent: "vitest" };
@@ -43,6 +50,15 @@ async function registerOwner(companyName = "Empresa A") {
   return result;
 }
 
+/** OWNER e ADMIN só acessam depois de cadastrar o segundo fator. */
+async function enableMfa(token: string) {
+  const start = await auth.mfa.start(token, context);
+  if (!start.ok) throw new Error(`falha ao iniciar MFA: ${start.reason}`);
+  const confirmation = await auth.mfa.confirm(token, { code: totpCode(start.secret, totpStep(new Date())) }, context);
+  if (!confirmation.ok) throw new Error(`falha ao confirmar MFA: ${confirmation.reason}`);
+  return confirmation.recoveryCodes;
+}
+
 /** Cria uma pessoa com vínculo ativo e os perfis indicados na empresa, e faz login. */
 async function addMember(companyId: string, roleKeys: SystemRoleKey[]) {
   const email = uniqueEmail();
@@ -60,8 +76,14 @@ async function addMember(companyId: string, roleKeys: SystemRoleKey[]) {
 }
 
 describe("cadeia de autorização com PostgreSQL", () => {
-  it("OWNER recém-cadastrado acessa a própria empresa e lista seus membros", async () => {
+  it("OWNER acessa a própria empresa e lista seus membros após o segundo fator", async () => {
     const owner = await registerOwner();
+
+    await expect(auth.authorize(owner.session.token, "members.read")).resolves.toEqual({
+      ok: false,
+      reason: "mfa_enrollment_required",
+    });
+    await enableMfa(owner.session.token);
 
     const authorization = await auth.authorize(owner.session.token, "members.read");
     if (!authorization.ok) throw new Error(`esperava autorização: ${authorization.reason}`);
@@ -78,7 +100,7 @@ describe("cadeia de autorização com PostgreSQL", () => {
     expect(Object.keys(members[0] ?? {}).sort()).toEqual(["email", "joinedAt", "name", "roleKeys", "status", "userId"]);
   });
 
-  it("VISUALIZADOR lê a empresa, mas não lista membros", async () => {
+  it("VISUALIZADOR lê a empresa, mas não lista membros, e não precisa de segundo fator", async () => {
     const owner = await registerOwner();
     const viewer = await addMember(owner.companyId, ["VISUALIZADOR"]);
 
@@ -99,6 +121,7 @@ describe("cadeia de autorização com PostgreSQL", () => {
 
   it("vínculo suspenso ou empresa suspensa perdem o acesso imediatamente, mesmo com sessão válida", async () => {
     const owner = await registerOwner();
+    await enableMfa(owner.session.token);
     const member = await addMember(owner.companyId, ["GESTOR"]);
     await expect(auth.authorize(member.token, "members.read")).resolves.toMatchObject({ ok: true });
 
@@ -157,6 +180,7 @@ describe("cadeia de autorização com PostgreSQL", () => {
   it("consultas nunca retornam dados de outra empresa (IDOR)", async () => {
     const companyA = await registerOwner("Empresa A");
     const companyB = await registerOwner("Empresa B");
+    await enableMfa(companyA.session.token);
 
     const authorization = await auth.authorize(companyA.session.token, "members.read");
     if (!authorization.ok) throw new Error("esperava autorização");
@@ -168,8 +192,10 @@ describe("cadeia de autorização com PostgreSQL", () => {
     ]);
   });
 
-  it("módulo não habilitado bloqueia mesmo com vínculo e permissão", async () => {
+  it("módulo não habilitado bloqueia mesmo com vínculo, segundo fator e permissão", async () => {
     const owner = await registerOwner();
+    await enableMfa(owner.session.token);
+
     const authorize = createAuthorizer({
       sessions: createSessionManager({
         sessions: createPrismaSessionRepository(prisma),
@@ -178,6 +204,7 @@ describe("cadeia de autorização com PostgreSQL", () => {
       }),
       identity: createPrismaIdentityRepository(prisma),
       access: createPrismaAccessControlRepository(prisma),
+      mfa: createPrismaMfaRepository(prisma, TEST_APPLICATION_KEYS),
       entitlements: { isModuleEnabled: async () => false },
     });
 

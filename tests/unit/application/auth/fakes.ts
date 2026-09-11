@@ -1,5 +1,6 @@
 import type { AccessControlRepository, EntitlementService, MembershipAccess } from "@/application/ports/access-control";
 import type { AuditEvent, AuditLogger } from "@/application/ports/audit-logger";
+import type { MfaRepository, MfaService } from "@/application/ports/mfa";
 import type {
   IdentityRepository,
   MembershipSummary,
@@ -50,6 +51,10 @@ export function createInMemorySessions() {
     async setActiveCompany(id, companyId) {
       const row = rows.get(id);
       if (row && !row.revokedAt) rows.set(id, { ...row, activeCompanyId: companyId });
+    },
+    async setMfaVerified(id, at) {
+      const row = rows.get(id);
+      if (row && !row.revokedAt) rows.set(id, { ...row, mfaVerifiedAt: at });
     },
     async revoke(id, at) {
       const row = rows.get(id);
@@ -117,12 +122,81 @@ export function createFakeAccess() {
     grants.set(`${userId}@${companyId}`, {
       membershipStatus: "ACTIVE",
       companyActive: true,
-      roleKeys: ["OWNER"],
+      // GESTOR por padrão: perfil que não exige segundo fator.
+      roleKeys: ["GESTOR"],
       permissions: ["company.read", "members.read"],
       ...access,
     });
   };
   return { repository, grant, lookups };
+}
+
+export function createFakeMfa(initial: { confirmed?: boolean; secret?: string; lastUsedStep?: number | null } = {}) {
+  const state = {
+    secret: initial.secret ?? null as string | null,
+    confirmed: initial.confirmed ?? false,
+    lastUsedStep: initial.lastUsedStep ?? null,
+    codes: new Map<string, Date | null>(),
+  };
+
+  const repository: MfaRepository = {
+    async findCredential() {
+      return state.secret ? { confirmed: state.confirmed } : null;
+    },
+    async findSecret() {
+      return state.secret
+        ? { secret: state.secret, confirmed: state.confirmed, lastUsedStep: state.lastUsedStep }
+        : null;
+    },
+    async startEnrollment(_userId, secret) {
+      state.secret = secret;
+      state.confirmed = false;
+      state.lastUsedStep = null;
+    },
+    async confirmEnrollment(_userId, _at, step) {
+      state.confirmed = true;
+      state.lastUsedStep = step;
+    },
+    async recordUsedStep(_userId, step) {
+      state.lastUsedStep = step;
+    },
+    async replaceRecoveryCodes(_userId, codeHashes) {
+      state.codes = new Map(codeHashes.map((hash) => [hash, null]));
+    },
+    async consumeRecoveryCode(_userId, codeHash, at) {
+      if (!state.codes.has(codeHash) || state.codes.get(codeHash) !== null) return false;
+      state.codes.set(codeHash, at);
+      return true;
+    },
+    async countUnusedRecoveryCodes() {
+      return [...state.codes.values()].filter((usedAt) => usedAt === null).length;
+    },
+  };
+
+  return { repository, state };
+}
+
+export function createFakeMfaService(validCode = "123456", initialStep = 1000) {
+  let step = initialStep;
+
+  const service: MfaService = {
+    generateSecret: () => "SECRETOFAKE234567",
+    keyUri: ({ secret, accountName }) => `otpauth://totp/VELDOCS:${accountName}?secret=${secret}`,
+    // Espelha o real: um código só vale em um passo ainda não usado.
+    verifyTotp: ({ code, lastUsedStep }) =>
+      code === validCode && (lastUsedStep === null || lastUsedStep < step) ? { step } : null,
+    // Códigos válidos no alfabeto base32 (sem 0, 1, 8 e 9).
+    generateRecoveryCodes: (count) =>
+      Array.from({ length: count }, (_value, index) => `RECOVERY${String.fromCharCode(65 + index).repeat(2)}`),
+  };
+
+  return {
+    service,
+    /** Avança a janela de tempo do TOTP (novo código disponível). */
+    advanceStep: () => {
+      step += 1;
+    },
+  };
 }
 
 export function createFakeEntitlements(enabled = true) {

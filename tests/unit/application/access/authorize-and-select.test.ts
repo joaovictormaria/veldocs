@@ -10,6 +10,7 @@ import {
   createFakeClock,
   createFakeEntitlements,
   createFakeIdentity,
+  createFakeMfa,
   createFakeTokens,
   createInMemorySessions,
 } from "../auth/fakes";
@@ -18,7 +19,13 @@ const COMPANY_A = "0192d7a0-0000-7000-8000-00000000000a";
 const COMPANY_B = "0192d7a0-0000-7000-8000-00000000000b";
 const context = { ipAddress: "203.0.113.10", userAgent: "teste" };
 
-async function setup(options: { activeCompanyId?: string | null; entitlementsEnabled?: boolean } = {}) {
+async function setup(
+  options: {
+    activeCompanyId?: string | null;
+    entitlementsEnabled?: boolean;
+    mfa?: { confirmed?: boolean; secret?: string };
+  } = {},
+) {
   const clock = createFakeClock();
   const identity = createFakeIdentity();
   const user = identity.addUser({ email: "maria@example.com", password: "uma frase longa e secreta" });
@@ -26,6 +33,7 @@ async function setup(options: { activeCompanyId?: string | null; entitlementsEna
   const sessions = createSessionManager({ sessions: store.repository, tokens: createFakeTokens(), now: clock.now });
   const access = createFakeAccess();
   const entitlements = createFakeEntitlements(options.entitlementsEnabled ?? true);
+  const mfa = createFakeMfa(options.mfa ?? {});
   const { audit, events } = createFakeAudit();
 
   const issued = await sessions.issue({
@@ -41,9 +49,22 @@ async function setup(options: { activeCompanyId?: string | null; entitlementsEna
     entitlements,
     events,
     store,
+    sessions,
+    clock,
     token: issued.token,
-    authorize: createAuthorizer({ sessions, identity: identity.identity, access: access.repository, entitlements: entitlements.service }),
-    selectActiveCompany: createSelectActiveCompany({ sessions, identity: identity.identity, access: access.repository, audit }),
+    authorize: createAuthorizer({
+      sessions,
+      identity: identity.identity,
+      access: access.repository,
+      entitlements: entitlements.service,
+      mfa: mfa.repository,
+    }),
+    selectActiveCompany: createSelectActiveCompany({
+      sessions,
+      identity: identity.identity,
+      access: access.repository,
+      audit,
+    }),
   };
 }
 
@@ -102,6 +123,31 @@ describe("authorize", () => {
     access.grant(user.userId, COMPANY_A);
 
     await expect(authorize(token, "company.read")).resolves.toEqual({ ok: false, reason: "module_not_enabled" });
+  });
+
+  it.each(["OWNER", "ADMIN"])("perfil %s sem segundo fator cadastrado é recusado", async (roleKey) => {
+    const { authorize, access, entitlements, user, token } = await setup();
+    access.grant(user.userId, COMPANY_A, { roleKeys: [roleKey], permissions: ["company.read"] });
+
+    await expect(authorize(token, "company.read")).resolves.toEqual({ ok: false, reason: "mfa_enrollment_required" });
+    expect(entitlements.checks).toHaveLength(0);
+  });
+
+  it("perfil que exige MFA precisa confirmar o segundo fator na sessão", async () => {
+    const { authorize, access, sessions, clock, user, token } = await setup({ mfa: { confirmed: true, secret: "S" } });
+    access.grant(user.userId, COMPANY_A, { roleKeys: ["OWNER"], permissions: ["company.read"] });
+
+    await expect(authorize(token, "company.read")).resolves.toEqual({ ok: false, reason: "mfa_required" });
+
+    await sessions.setMfaVerified(token, clock.now());
+    await expect(authorize(token, "company.read")).resolves.toMatchObject({ ok: true });
+  });
+
+  it("perfis sem exigência não precisam de segundo fator", async () => {
+    const { authorize, access, user, token } = await setup();
+    access.grant(user.userId, COMPANY_A, { roleKeys: ["COLABORADOR"], permissions: ["company.read"] });
+
+    await expect(authorize(token, "company.read")).resolves.toMatchObject({ ok: true });
   });
 });
 
