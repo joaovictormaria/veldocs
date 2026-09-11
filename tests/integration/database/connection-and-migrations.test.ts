@@ -16,6 +16,7 @@ const APPLICATION_TABLES = [
   "audit_logs",
   "branches",
   "companies",
+  "company_invitations",
   "company_modules",
   "departments",
   "document_categories",
@@ -45,6 +46,7 @@ const APPLICATION_TABLES = [
  */
 const TENANT_SCOPED_TABLES = [
   "branches",
+  "company_invitations",
   "company_modules",
   "departments",
   "document_categories",

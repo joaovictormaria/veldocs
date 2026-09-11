@@ -43,6 +43,8 @@ enum MembershipStatus {
   INVITED
   ACTIVE
   SUSPENDED
+  /// Removido da empresa: sem acesso; histórico e auditoria preservados.
+  REMOVED
 }
 
 /// Tenant raiz. Nenhum dado empresarial existe fora de uma Company.
@@ -68,6 +70,7 @@ model Company {
   auditLogs          AuditLog[]
   modules            CompanyModule[]
   subscription       Subscription?
+  invitations        CompanyInvitation[]
 
   @@map("companies")
 }
@@ -128,11 +131,12 @@ model User {
   updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt       DateTime?  @map("deleted_at") @db.Timestamptz(3)
 
-  memberships    Membership[]
-  sessions       Session[]
-  auditLogs      AuditLog[]
-  totpCredential UserTotpCredential?
-  recoveryCodes  UserRecoveryCode[]
+  memberships         Membership[]
+  sessions            Session[]
+  auditLogs           AuditLog[]
+  totpCredential      UserTotpCredential?
+  recoveryCodes       UserRecoveryCode[]
+  acceptedInvitations CompanyInvitation[] @relation("InvitationAcceptedBy")
 
   @@map("users")
 }
@@ -178,13 +182,14 @@ model Membership {
   createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  company              Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  user                 User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  company              Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Restrict)
   roles                UserRole[]
-  responsibleDocuments Document[] @relation("DocumentResponsibleMember")
-  createdDocuments     Document[] @relation("DocumentCreatedByMember")
-  actorAuditLogs       AuditLog[] @relation("AuditLogActorMembership")
+  responsibleDocuments Document[]          @relation("DocumentResponsibleMember")
+  createdDocuments     Document[]          @relation("DocumentCreatedByMember")
+  actorAuditLogs       AuditLog[]          @relation("AuditLogActorMembership")
   activeSessions       Session[]
+  sentInvitations      CompanyInvitation[] @relation("InvitationInviter")
 
   @@unique([companyId, userId])
   @@unique([companyId, id])
@@ -205,9 +210,10 @@ model Role {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  company     Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
   permissions RolePermission[]
   users       UserRole[]
+  invitations CompanyInvitation[]
 
   @@unique([companyId, id])
   @@unique([companyId, key])
@@ -577,4 +583,32 @@ model KitPrice {
 
   @@index([kitKey, validFrom])
   @@map("kit_prices")
+}
+
+/// Convite para entrar numa empresa (FASE 3). O link leva um token aleatório;
+/// aqui fica só o SHA-256 dele. Vale 7 dias e uma única vez; um convite novo
+/// para o mesmo e-mail revoga o anterior.
+model CompanyInvitation {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  companyId        String    @map("company_id") @db.Uuid
+  /// Normalizado em minúsculas (CHECK no banco).
+  email            String    @db.VarChar(320)
+  roleId           String    @map("role_id") @db.Uuid
+  /// SHA-256 (hex) do token do link. O token nunca é gravado.
+  tokenHash        String    @unique @map("token_hash") @db.VarChar(64)
+  invitedByUserId  String    @map("invited_by_user_id") @db.Uuid
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
+  acceptedAt       DateTime? @map("accepted_at") @db.Timestamptz(3)
+  acceptedByUserId String?   @map("accepted_by_user_id") @db.Uuid
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  role       Role       @relation(fields: [companyId, roleId], references: [companyId, id], onDelete: Restrict)
+  invitedBy  Membership @relation("InvitationInviter", fields: [companyId, invitedByUserId], references: [companyId, userId], onDelete: Restrict)
+  acceptedBy User?      @relation("InvitationAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, email])
+  @@index([expiresAt])
+  @@map("company_invitations")
 }

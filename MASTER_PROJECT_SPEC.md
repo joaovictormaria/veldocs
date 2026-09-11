@@ -624,7 +624,7 @@ Nunca permitir acesso cruzado.
 - ✅ CONCLUÍDO — Todo recurso empresarial possui vínculo de tenant.
   - Evidência: `company_id NOT NULL` em `branches`, `departments`, `memberships`, `roles`, `user_roles`, `document_categories`, `documents`; `users` é a pessoa global e acessa empresas por `memberships` (DEC-009).
   - Teste: `tests/integration/database/connection-and-migrations.test.ts` — passou (local e CI, 2026-09-11).
-- 🟡 PARCIAL — Toda leitura valida tenant: as rotas de negócio existentes (`/api/company`, `/api/company/members`, `/api/company/members/[userId]`, `/api/company/branches*`, `/api/company/departments*`, `/api/builder/*`, `/api/subscription`) usam só a empresa ativa da sessão, com vínculo e empresa ativos. Cada rota nova deve usar `authorizeRequest`.
+- 🟡 PARCIAL — Toda leitura valida tenant: as rotas de negócio existentes (`/api/company`, `/api/company/members`, `/api/company/members/[userId]`, `/api/company/branches*`, `/api/company/departments*`, `/api/builder/*`, `/api/subscription`, `/api/company/roles`, `/api/company/invitations*`) usam só a empresa ativa da sessão, com vínculo e empresa ativos. Cada rota nova deve usar `authorizeRequest`.
   - Testes: `tests/integration/access/access-control.test.ts`, `company-management.test.ts` e `tests/e2e/*.spec.ts` — passaram (local, 2026-09-11).
 - 🟡 PARCIAL — Toda escrita valida tenant: o banco rejeita vínculos entre empresas por FKs compostas, inclusive pessoa que não é membro (DEC-010); nas rotas, a empresa vem sempre do `AuthorizedContext` e o `companyId` entra em toda cláusula `where` (empresa, filiais e setores). Rotas dos demais recursos ainda não existem.
   - Testes: `tests/integration/database/tenant-isolation-constraints.test.ts` (17 testes) e `tests/integration/access/company-management.test.ts` — passaram.
@@ -709,8 +709,8 @@ Referências principais:
 
 - ✅ CONCLUÍDO — Rate limiting: cadastro, login, segundo fator e rotas de negócio (120/min por IP, resposta 429 com `Retry-After`); implementação em PostgreSQL (DEC-016). Testes unitários e de integração — passaram.
 - 🟡 PARCIAL — Input validation (Zod nas rotas de autenticação e de gestão da empresa, com erros por campo em `issues`; `Content-Type: application/json` obrigatório e corpo limitado a 16 KB — unit + E2E — passaram)
-- 🟡 PARCIAL — Proteção BOLA/IDOR: rotas por id (`members/[userId]`, `branches/[branchId]`, `departments/[departmentId]`) buscam sempre por `(empresa da sessão, recurso)` e respondem 404 para outra empresa, inexistente ou id inválido (integração + E2E — passaram); aplicar a cada novo recurso.
-- 🟡 PARCIAL — Proteção de função: cada rota exige sua permissão (perfil sem permissão → 403); funções administrativas ainda não existem.
+- 🟡 PARCIAL — Proteção BOLA/IDOR: rotas por id (`members/[userId]` e suas sub-rotas, `invitations/[invitationId]`, `branches/[branchId]`, `departments/[departmentId]`) buscam sempre por `(empresa da sessão, recurso)` e respondem 404 para outra empresa, inexistente ou id inválido (integração + E2E — passaram); aplicar a cada novo recurso.
+- 🟡 PARCIAL — Proteção de função: cada rota exige sua permissão (perfil sem permissão → 403). Funções administrativas de membros têm regras próprias: ninguém altera o próprio vínculo, só Proprietário mexe em Proprietário e a empresa nunca fica sem Proprietário ativo (DEC-027). Perfis personalizados ainda não existem.
 - 🟡 PARCIAL — Limites de recursos (corpo de 16 KB; timeout no health check; limites por plano pendentes)
 - [ ] Proteção contra SSRF quando aplicável (não há chamadas externas a partir de entrada do usuário)
 - [ ] API versioning (rotas atuais em `/api/...`, sem versão)
@@ -1327,7 +1327,7 @@ As recomendações devem ser:
 
 ## FASE 3 — Empresa, usuários e módulos comerciais
 
-**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada. Da segunda, já existem o catálogo de módulos, os entitlements por empresa e os estados do trial no backend; faltam a tela do Builder (a API existe), a troca de kit e módulos durante o trial e a exclusão de contas após a retenção. Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
+**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada. Da segunda, já existem o catálogo de módulos, os entitlements por empresa e os estados do trial no backend; faltam a tela do Builder (a API existe), a troca de kit e módulos durante o trial, perfis personalizados e a exclusão de contas após a retenção. Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
 
 - ✅ CONCLUÍDO — Empresas (entidade, criação no cadastro e edição dos dados cadastrais com CNPJ validado)
   - Evidência: `PATCH /api/company` (`company.update`), `src/application/access/manage-company.ts`, `src/domain/company/cnpj.ts`; auditoria `company.updated`.
@@ -1336,8 +1336,10 @@ As recomendações devem ser:
   - Evidência: `GET/POST /api/company/branches` e `GET/PATCH/DELETE /api/company/branches/[branchId]` (`branches.read` / `branches.manage`); código único por empresa, exclusão lógica que recusa filial em uso e libera o código (DEC-021); auditoria `branch.created/updated/deleted`.
 - ✅ CONCLUÍDO — Setores (entidade e gestão completa)
   - Evidência: `GET/POST /api/company/departments` e `GET/PATCH/DELETE /api/company/departments/[departmentId]` (`departments.read` / `departments.manage`); setor da empresa inteira ou de uma filial, sempre da mesma empresa; auditoria `department.created/updated/deleted`.
-- 🟡 PARCIAL — Usuários (pessoa global e vínculos; convites pendentes)
-- 🟡 PARCIAL — Roles (5 perfis padrão por empresa)
+- ✅ CONCLUÍDO — Usuários: pessoa global com vínculos, convites e gestão de membros
+  - Evidência: convite por link (`POST /api/company/invitations`, prévia, aceite com sessão e cadastro pelo link — DEC-028), troca de perfil, suspensão, reativação e remoção sem apagar o vínculo (DEC-027); `src/application/access/manage-members.ts`; `docs/api/membros-convites.md`.
+  - Testes: `tests/integration/access/members.test.ts` e `tests/e2e/members.spec.ts` — passaram (local, 2026-09-11).
+- 🟡 PARCIAL — Roles: 5 perfis padrão por empresa, listados com permissões e membros (`GET /api/company/roles`) e atribuídos a membros; perfis personalizados pendentes.
 - 🟡 PARCIAL — Permissions (catálogo de 18 permissões)
 - 🟡 PARCIAL — Catálogo de módulos
   - Evidência: os 17 módulos da seção 2.3 em `src/domain/billing/module-catalog.ts`, povoados pela migração `commercial_catalog_and_subscriptions` (DEC-023); tabelas `modules`, `module_dependencies` e `module_prices`. Teste de integração compara banco × domínio.
@@ -1729,19 +1731,45 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 ---
 
+## DEC-027 — Remover membro sem apagar o vínculo
+
+**Status:** ✅ CONCLUÍDO (implementado na FASE 3)
+
+**Decisão:** remover um membro muda o vínculo para `REMOVED` em vez de apagá-lo. O vínculo removido não tem acesso, sai das listagens, perde os perfis e pode ser reativado por um novo convite.
+
+**Motivo:** `audit_logs` referencia o vínculo `(company_id, user_id)` com `ON DELETE RESTRICT` — o histórico de quem fez o quê precisa continuar íntegro. Apagar o vínculo seria impossível para qualquer membro com ações registradas, ou exigiria apagar a própria auditoria.
+
+**Proteções junto com a remoção:** ninguém altera o próprio vínculo; só Proprietário altera, suspende ou remove Proprietário; a empresa nunca fica sem Proprietário ativo — conferido no banco em transação serializável, para que duas alterações simultâneas não passem cada uma na sua checagem.
+
+**Evidência:** `src/infrastructure/database/prisma-member-management-repository.ts`; `tests/integration/access/members.test.ts` (remoção com histórico preservado e novo convite; proteções; último Proprietário) — passaram.
+
+---
+
+## DEC-028 — Convites por link, sem e-mail transacional
+
+**Status:** ✅ CONCLUÍDO (implementado na FASE 3)
+
+**Decisão:** o convite gera um link `/convite/{token}` que quem convida compartilha como quiser. O token é aleatório (32 bytes) e só o SHA-256 fica no banco; o link é exibido uma única vez, vale 7 dias e um uso, e um convite novo para o mesmo e-mail revoga o anterior. Quem não tem conta se cadastra pelo link já como membro, sem criar empresa.
+
+**Motivo:** o e-mail transacional (Resend) está no backlog por decisão do usuário. O link resolve o convite hoje, e o envio por e-mail poderá usar o mesmo token depois.
+
+**Evidência:** `src/application/access/manage-members.ts`, `docs/api/membros-convites.md`; `tests/integration/access/members.test.ts` e `tests/e2e/members.spec.ts` — passaram.
+
+---
+
 # 24. STATUS GERAL
 
 **Produto:** ✅ CONCLUÍDO (definição e identidade visual; vetores da logo pendentes)
 **Arquitetura:** ✅ CONCLUÍDO (monólito modular em camadas; entitlements por empresa na cadeia de autorização)
 **Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit, CSRF, empresa ativa, RBAC, MFA para OWNER/ADMIN, CSP com nonce, HSTS e logs estruturados; verificação de e-mail e recuperação de senha no backlog)
 **Frontend:** 🔴 NÃO IMPLEMENTADO (somente página inicial da fundação)
-**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial, entitlements por empresa e API do Builder com início do trial; sem módulos de negócio)
+**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial, entitlements por empresa, API do Builder com início do trial e gestão de membros com convites; sem módulos de negócio)
 **Banco:** 🟡 PARCIAL (identidade, empresa, acesso, documentos, auditoria, catálogo comercial com preços e kits, módulos por empresa e assinatura com prazos de retenção)
 **Storage:** 🔴 NÃO IMPLEMENTADO
 **Billing:** 🔴 NÃO IMPLEMENTADO
 **WhatsApp:** 🔴 NÃO IMPLEMENTADO
 **IA:** 🔴 NÃO IMPLEMENTADO
-**Testes:** 🟡 PARCIAL (346 unitários, 127 integração, 26 E2E; CI bloqueando o deploy)
+**Testes:** 🟡 PARCIAL (357 unitários, 135 integração, 29 E2E; CI bloqueando o deploy)
 
 ## Bloqueadores
 
@@ -2194,3 +2222,37 @@ Verificação em produção: após o merge e o deploy. A migração só acrescen
 
 - A tela do Builder não existe: o frontend ainda não tem nem as telas de login.
 - Trocar kit ou módulos durante o trial ainda não é possível (seção 2.8).
+
+---
+
+## 2026-09-11 — FASE 3: membros, perfis e convites
+
+### O que foi feito
+
+| Item | Evidência |
+|---|---|
+| Convites | `POST/GET /api/company/invitations`, `DELETE /api/company/invitations/[id]`; link `/convite/{token}` exibido uma vez, só o SHA-256 no banco, 7 dias, um uso, novo convite revoga o anterior (DEC-028) |
+| Link do convite | `GET /api/invitations/[token]` (prévia com e-mail mascarado), `POST …/accept` (com sessão, mesmo e-mail) e `POST …/signup` (conta nova já como membro, sem criar empresa) |
+| Gestão | `PUT /api/company/members/[userId]/roles`, `PUT …/status`, `DELETE /api/company/members/[userId]` |
+| Perfis | `GET /api/company/roles` com permissões e membros ativos |
+| Proteções | ninguém altera o próprio vínculo; só Proprietário mexe em Proprietário; nunca sem Proprietário ativo, em transação serializável |
+| Remoção | status `REMOVED`: sem acesso, fora das listagens, histórico preservado, pode voltar por convite (DEC-027) |
+| Banco | migração `20260911061303_members_invitations` |
+| Documentação | `docs/api/membros-convites.md` |
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm lint` / `tsc --noEmit` | ✅ sem erros |
+| `pnpm test` | ✅ 30 arquivos, 357 testes (novos: regras de perfis entre membros, validade e máscara do convite) |
+| `pnpm test:integration` | ✅ 11 arquivos, 135 testes (novos: convite e cadastro pelo link, aceite com sessão e outro e-mail, revogação e vencimento, proteções, remoção e retorno, último Proprietário) |
+| `pnpm test:e2e` | ✅ 29 testes (novos: fluxo completo por HTTP com duas sessões, convite revogado, sessão e origem) |
+| `pnpm build` | ✅ |
+
+Verificação em produção: após o merge e o deploy. A migração só acrescenta um valor ao enum e uma tabela.
+
+### Observações
+
+- A tela `/convite/{token}` entra junto com as telas de acesso e do Builder, logo em seguida; até lá o link funciona pela API.
+- Perfis personalizados (`roles.manage`) continuam pendentes.

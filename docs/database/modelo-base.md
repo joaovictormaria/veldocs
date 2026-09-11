@@ -22,7 +22,7 @@ Fonte da verdade: [`prisma/schema.prisma`](../../prisma/schema.prisma) e [`prism
 | `branches` | tenant | `code` único por empresa |
 | `departments` | tenant | opcionalmente vinculado a uma filial do mesmo tenant |
 | `users` | **global (pessoa)** | e-mail único e em minúsculas; CPF opcional só como HMAC + cifrado; hash Argon2id; status ACTIVE/DISABLED |
-| `memberships` | tenant | vínculo pessoa ↔ empresa; `(company_id, user_id)` único; status INVITED/ACTIVE/SUSPENDED |
+| `memberships` | tenant | vínculo pessoa ↔ empresa; `(company_id, user_id)` único; status INVITED/ACTIVE/SUSPENDED/REMOVED — removido não é apagado, porque a auditoria referencia o vínculo (DEC-027) |
 | `roles` | tenant | `key` única por empresa; `is_system` para os 5 perfis padrão |
 | `permissions` | **global** | catálogo do sistema; `key` única no formato `recurso.acao` (CHECK) |
 | `role_permissions` | via `roles` | junção perfil ↔ permissão |
@@ -35,6 +35,7 @@ Fonte da verdade: [`prisma/schema.prisma`](../../prisma/schema.prisma) e [`prism
 | `modules` | **global** | catálogo comercial (MASTER SPEC 2.3); `key` estável usada nos entitlements; `is_core`; `status` AVAILABLE/COMING_SOON/RETIRED; **povoado pela migração** (DEC-023) |
 | `module_dependencies` | **global** | "módulo depende de módulo" (MASTER SPEC 2.6); nenhuma dependência declarada ainda |
 | `module_prices` | **global** | preço por módulo em centavos, com histórico (`valid_from`/`valid_until`); preços iniciais de 2026-09-11 **povoados pela migração**; preço nunca é sobrescrito |
+| `company_invitations` | tenant | convite por link: só o SHA-256 do token; 7 dias, um uso; perfil e autor da mesma empresa por FK composta (DEC-028) |
 | `kits` | **global** | kits comerciais (MASTER SPEC 2.7, DEC-024); **povoados pela migração** |
 | `kit_modules` | **global** | módulos incluídos em cada kit; FK para `modules` |
 | `kit_prices` | **global** | preço por kit, com o mesmo histórico e as mesmas regras dos preços de módulo |
@@ -83,6 +84,7 @@ Isso é **defesa em profundidade** — a autorização server-side por tenant co
 | Preço de kit não negativo, vigência em ordem e moeda com 3 letras | `kit_prices_amount_non_negative_chk`, `kit_prices_validity_order_chk`, `kit_prices_currency_format_chk` | `kits_and_subscription_retention` |
 | Os 6 kits, sua composição e preços | `INSERT` em `kits`, `kit_modules` e `kit_prices` | `kits_and_subscription_retention` |
 | Permissões `billing.read`/`billing.manage` para OWNER e ADMIN das empresas existentes | `INSERT` em `permissions` e `INSERT … SELECT` em `role_permissions` | `builder_trial_and_billing_permissions` |
+| E-mail do convite em minúsculas, token só como SHA-256 hexadecimal, convite não pode ser aceito e revogado ao mesmo tempo | `company_invitations_email_lowercase_chk`, `company_invitations_token_hash_format_chk`, `company_invitations_accepted_or_revoked_chk` | `members_invitations` |
 
 ## Migrações
 
@@ -95,6 +97,7 @@ Isso é **defesa em profundidade** — a autorização server-side por tenant co
 | `20260911044509_module_prices_initial` | CHECKs de preço e preços mensais iniciais dos 17 módulos (decisão do usuário em 2026-09-11) |
 | `20260911051529_kits_and_subscription_retention` | `kits`, `kit_modules` e `kit_prices` com os 6 kits; coluna `subscriptions.suspended_at` para a retenção |
 | `20260911054436_builder_trial_and_billing_permissions` | coluna `subscriptions.kit_key` (FK para `kits`) e permissões de assinatura para OWNER e ADMIN já existentes |
+| `20260911061303_members_invitations` | status `REMOVED` em `MembershipStatus` e tabela `company_invitations` |
 
 A preservação de dados da migração `identity_memberships_sessions` foi verificada em 2026-09-11 num banco descartável: migração 1 → dados no formato antigo (pessoas INVITED/ACTIVE/DISABLED, perfil, documento com responsável e criador, auditoria) → migração 2 → vínculos e status corretos, nenhum registro perdido.
 

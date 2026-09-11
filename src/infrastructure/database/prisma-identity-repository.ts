@@ -103,7 +103,8 @@ export function createPrismaIdentityRepository(prisma: PrismaClient): IdentityRe
 
     async listMemberships(userId) {
       const rows = await prisma.membership.findMany({
-        where: { userId, company: { deletedAt: null } },
+        // Vínculo removido não aparece para a pessoa: ela saiu da empresa.
+        where: { userId, status: { not: "REMOVED" }, company: { deletedAt: null } },
         orderBy: { createdAt: "asc" },
         select: {
           companyId: true,
