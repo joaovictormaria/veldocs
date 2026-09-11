@@ -299,7 +299,7 @@ Auditado em 2026-09-11 (detalhes e evidências na seção 25 do `MASTER_PROJECT_
 
 - **FASE 0 — Produto e posicionamento:** concluída, incluindo a identidade visual ([`docs/brand/identidade-visual.md`](./docs/brand/identidade-visual.md)).
 - **FASE 1 — Fundação técnica:** concluída.
-- **FASE 2 — Segurança base:** parcial. Em produção: pessoa com vínculos multiempresa, cadastro, login por e-mail ou CPF + senha, sessão segura, limites de tentativa e auditoria. Pendentes: RBAC e tenant nas rotas de negócio, MFA, verificação de e-mail, recuperação de senha, link mágico, Google, CSP/HSTS e logs.
+- **FASE 2 — Segurança base:** parcial. Prontos: pessoa com vínculos multiempresa, cadastro, login por e-mail ou CPF + senha, sessão segura, limites de tentativa, auditoria, empresa ativa, permissões (RBAC) nas rotas e segundo fator obrigatório para OWNER/ADMIN. Pendentes: verificação de e-mail, recuperação de senha, link mágico, Google, CSP/HSTS e logs.
 - **FASE 3 — Empresa + módulos comerciais:** não iniciada (catálogo de módulos, entitlements, Builder, preço e trial ainda não existem).
 - **CI/CD:** GitHub Actions (lint, tipos, testes unitários, integração, build e E2E) e deploy no Railway somente com CI verde.
 

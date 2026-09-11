@@ -42,6 +42,10 @@ export function createPrismaSessionRepository(prisma: PrismaClient): SessionRepo
       await prisma.session.updateMany({ where: { id, revokedAt: null }, data: { activeCompanyId: companyId } });
     },
 
+    async setMfaVerified(id, at) {
+      await prisma.session.updateMany({ where: { id, revokedAt: null }, data: { mfaVerifiedAt: at } });
+    },
+
     async revoke(id, at) {
       await prisma.session.updateMany({ where: { id, revokedAt: null }, data: { revokedAt: at } });
     },

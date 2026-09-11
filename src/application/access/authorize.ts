@@ -1,6 +1,8 @@
 import type { SessionManager } from "@/application/auth/session-manager";
 import type { AccessControlRepository, EntitlementService } from "@/application/ports/access-control";
 import type { IdentityRepository } from "@/application/ports/identity-repository";
+import type { MfaRepository } from "@/application/ports/mfa";
+import { requiresMfa } from "@/domain/access-control/mfa-policy";
 import { moduleOfPermission } from "@/domain/access-control/permission-modules";
 import type { CatalogPermission } from "@/domain/access-control/system-roles";
 import type { TenantContext } from "@/domain/shared/tenant-context";
@@ -11,7 +13,13 @@ export interface AuthorizedContext extends TenantContext {
   readonly permissions: readonly string[];
 }
 
-export type AuthorizationFailure = "unauthenticated" | "active_company_required" | "forbidden" | "module_not_enabled";
+export type AuthorizationFailure =
+  | "unauthenticated"
+  | "active_company_required"
+  | "forbidden"
+  | "module_not_enabled"
+  | "mfa_enrollment_required"
+  | "mfa_required";
 
 export type AuthorizationResult =
   | { readonly ok: true; readonly context: AuthorizedContext }
@@ -20,14 +28,16 @@ export type AuthorizationResult =
 /**
  * Cadeia de autorização do MASTER SPEC:
  * sessão → pessoa ativa → empresa ativa → vínculo ativo em empresa ativa →
- * permissão do perfil → entitlement do módulo. A verificação do recurso fica
- * na consulta, sempre filtrada por `context.companyId`.
+ * segundo fator (quando o perfil exige) → permissão do perfil → entitlement
+ * do módulo. A verificação do recurso fica na consulta, sempre filtrada por
+ * `context.companyId`.
  */
 export function createAuthorizer(deps: {
   readonly sessions: SessionManager;
   readonly identity: IdentityRepository;
   readonly access: AccessControlRepository;
   readonly entitlements: EntitlementService;
+  readonly mfa: MfaRepository;
 }) {
   return async function authorize(
     token: string | undefined,
@@ -45,6 +55,12 @@ export function createAuthorizer(deps: {
     const access = await deps.access.findMembershipAccess(user.id, companyId);
     if (!access || access.membershipStatus !== "ACTIVE" || !access.companyActive) {
       return { ok: false, reason: "forbidden" };
+    }
+
+    if (requiresMfa(access.roleKeys)) {
+      const credential = await deps.mfa.findCredential(user.id);
+      if (!credential?.confirmed) return { ok: false, reason: "mfa_enrollment_required" };
+      if (!session.mfaVerifiedAt) return { ok: false, reason: "mfa_required" };
     }
 
     if (!access.permissions.includes(permission)) return { ok: false, reason: "forbidden" };

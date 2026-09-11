@@ -38,6 +38,8 @@ export interface SessionManager {
   validate(token: string | undefined): Promise<ValidSession | null>;
   /** Troca a empresa ativa de uma sessão válida (o vínculo deve ser verificado antes). */
   setActiveCompany(token: string | undefined, companyId: string): Promise<ValidSession | null>;
+  /** Registra a confirmação do segundo fator na sessão. */
+  setMfaVerified(token: string | undefined, at: Date): Promise<ValidSession | null>;
   /** Revoga a sessão do token, se existir e estiver ativa. */
   revoke(token: string | undefined): Promise<ValidSession | null>;
   revokeAllForUser(userId: string): Promise<number>;
@@ -112,6 +114,13 @@ export function createSessionManager(deps: {
       if (!session) return null;
       await deps.sessions.setActiveCompany(session.id, companyId);
       return { ...toValid(session), activeCompanyId: companyId };
+    },
+
+    async setMfaVerified(token, at) {
+      const session = await findActive(token);
+      if (!session) return null;
+      await deps.sessions.setMfaVerified(session.id, at);
+      return { ...toValid(session), mfaVerifiedAt: at };
     },
 
     async revoke(token) {
