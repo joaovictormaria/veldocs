@@ -1,10 +1,18 @@
 import "server-only";
+import { createAuthorizer } from "@/application/access/authorize";
+import { createCompanyQueries } from "@/application/access/company-queries";
+import { createSelectActiveCompany } from "@/application/access/select-active-company";
 import { createLoginUseCase } from "@/application/auth/login";
 import { createRegisterUseCase } from "@/application/auth/register";
 import { createSessionManager } from "@/application/auth/session-manager";
 import { createSessionUseCases } from "@/application/auth/session-use-cases";
 import type { PrismaClient } from "@/generated/prisma/client";
+import { createCoreOnlyEntitlementService } from "@/infrastructure/access/core-only-entitlements";
 import { getEnv } from "@/infrastructure/config/env";
+import {
+  createPrismaAccessControlRepository,
+  createPrismaCompanyDirectory,
+} from "@/infrastructure/database/prisma-access-control-repository";
 import { createPrismaAuditLogger } from "@/infrastructure/database/prisma-audit-logger";
 import { getPrismaClient } from "@/infrastructure/database/prisma-client";
 import { createPrismaIdentityRepository } from "@/infrastructure/database/prisma-identity-repository";
@@ -37,10 +45,15 @@ export function buildAuthServices(prisma: PrismaClient, keys: ApplicationKeys, n
     rateLimiter: createPrismaRateLimiter(prisma),
   };
 
+  const access = createPrismaAccessControlRepository(prisma);
+
   return {
     login: createLoginUseCase(dependencies),
     register: createRegisterUseCase({ ...dependencies, randomSlugSuffix: generateSlugSuffix }),
     ...createSessionUseCases({ sessions, identity, audit }),
+    authorize: createAuthorizer({ sessions, identity, access, entitlements: createCoreOnlyEntitlementService() }),
+    selectActiveCompany: createSelectActiveCompany({ sessions, identity, access, audit }),
+    company: createCompanyQueries(createPrismaCompanyDirectory(prisma)),
   };
 }
 

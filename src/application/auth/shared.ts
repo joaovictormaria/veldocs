@@ -31,6 +31,7 @@ export const AUTH_AUDIT_ACTIONS = {
   companyCreated: "company.created",
   logout: "auth.logout",
   logoutAll: "auth.logout_all",
+  activeCompanySelected: "auth.active_company_selected",
 } as const;
 
 export function ipRateLimitKey(scope: string, context: RequestContext): string {

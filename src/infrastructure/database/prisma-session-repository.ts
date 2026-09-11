@@ -38,6 +38,10 @@ export function createPrismaSessionRepository(prisma: PrismaClient): SessionRepo
       await prisma.session.updateMany({ where: { id, revokedAt: null }, data: { expiresAt, lastSeenAt: seenAt } });
     },
 
+    async setActiveCompany(id, companyId) {
+      await prisma.session.updateMany({ where: { id, revokedAt: null }, data: { activeCompanyId: companyId } });
+    },
+
     async revoke(id, at) {
       await prisma.session.updateMany({ where: { id, revokedAt: null }, data: { revokedAt: at } });
     },
