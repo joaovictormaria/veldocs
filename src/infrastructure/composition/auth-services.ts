@@ -2,6 +2,7 @@ import "server-only";
 import { createAuthorizer } from "@/application/access/authorize";
 import { createCompanyQueries } from "@/application/access/company-queries";
 import { createCompanyManagement } from "@/application/access/manage-company";
+import { createMemberManagement } from "@/application/access/manage-members";
 import { createSelectActiveCompany } from "@/application/access/select-active-company";
 import { createLoginUseCase } from "@/application/auth/login";
 import { createMfaUseCases } from "@/application/auth/mfa";
@@ -23,6 +24,7 @@ import { createPrismaCompanyManagementRepository } from "@/infrastructure/databa
 import { createPrismaMfaRepository } from "@/infrastructure/database/prisma-mfa-repository";
 import { getPrismaClient } from "@/infrastructure/database/prisma-client";
 import { createPrismaIdentityRepository } from "@/infrastructure/database/prisma-identity-repository";
+import { createPrismaMemberManagementRepository } from "@/infrastructure/database/prisma-member-management-repository";
 import { createPrismaRateLimiter } from "@/infrastructure/database/prisma-rate-limiter";
 import { createPrismaSessionRepository } from "@/infrastructure/database/prisma-session-repository";
 import { createPrismaSubscriptionRepository } from "@/infrastructure/database/prisma-subscription-repository";
@@ -80,6 +82,17 @@ export function buildAuthServices(prisma: PrismaClient, keys: ApplicationKeys, n
     subscriptions: createSubscriptionUseCases({
       repository: createPrismaSubscriptionRepository(prisma),
       catalog: billingCatalog,
+      audit,
+      now,
+    }),
+    members: createMemberManagement({
+      repository: createPrismaMemberManagementRepository(prisma),
+      sessions,
+      identity,
+      tokens: createTokenService(),
+      hasher: dependencies.hasher,
+      protector: dependencies.protector,
+      rateLimiter: dependencies.rateLimiter,
       audit,
       now,
     }),

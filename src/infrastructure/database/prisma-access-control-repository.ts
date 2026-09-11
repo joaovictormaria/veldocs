@@ -69,7 +69,7 @@ export function createPrismaCompanyDirectory(prisma: PrismaClient): CompanyDirec
 
     async listMembers(companyId) {
       const rows = await prisma.membership.findMany({
-        where: { companyId },
+        where: { companyId, status: { not: "REMOVED" } },
         orderBy: { createdAt: "asc" },
         select: memberSelect,
       });
@@ -81,7 +81,8 @@ export function createPrismaCompanyDirectory(prisma: PrismaClient): CompanyDirec
         where: { companyId_userId: { companyId, userId } },
         select: memberSelect,
       });
-      return row ? toMember(row) : null;
+      // Membro removido se comporta como inexistente.
+      return row && row.status !== "REMOVED" ? toMember(row) : null;
     },
   };
 }

@@ -1,7 +1,8 @@
 import type { SystemRoleDefinition } from "@/domain/access-control/system-roles";
 
 export type UserAccountStatus = "ACTIVE" | "DISABLED";
-export type MembershipAccessStatus = "INVITED" | "ACTIVE" | "SUSPENDED";
+/** `REMOVED`: saiu da empresa; sem acesso, mas o histórico continua ligado ao vínculo. */
+export type MembershipAccessStatus = "INVITED" | "ACTIVE" | "SUSPENDED" | "REMOVED";
 
 export interface UserCredentials {
   readonly userId: string;
