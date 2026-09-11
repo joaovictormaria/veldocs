@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { createAuthorizer } from "@/application/access/authorize";
 import { createCompanyQueries } from "@/application/access/company-queries";
 import { createCompanyManagement } from "@/application/access/manage-company";
@@ -14,6 +15,8 @@ import { createSubscriptionUseCases } from "@/application/billing/subscription-u
 import { createCategoryManagement } from "@/application/documents/manage-categories";
 import { createDocumentManagement } from "@/application/documents/manage-documents";
 import { createExpirationManagement } from "@/application/documents/manage-expirations";
+import { createDocumentFileManagement } from "@/application/documents/manage-document-files";
+import type { StorageProvider } from "@/application/ports/storage-provider";
 import { createDashboardQueries } from "@/application/dashboard/dashboard-queries";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { createDatabaseEntitlementService } from "@/infrastructure/access/database-entitlements";
@@ -26,6 +29,9 @@ import { createPrismaAuditLogger } from "@/infrastructure/database/prisma-audit-
 import { createPrismaBillingCatalogRepository } from "@/infrastructure/database/prisma-billing-catalog-repository";
 import { createPrismaCompanyManagementRepository } from "@/infrastructure/database/prisma-company-management-repository";
 import { createPrismaDashboardRepository } from "@/infrastructure/database/prisma-dashboard-repository";
+import { createPrismaDocumentFileRepository } from "@/infrastructure/database/prisma-document-file-repository";
+import { createS3StorageProvider } from "@/infrastructure/storage/s3-storage-provider";
+import { storageConfigFrom } from "@/infrastructure/storage/storage-config";
 import { createPrismaDocumentRepository } from "@/infrastructure/database/prisma-document-repository";
 import { createPrismaMfaRepository } from "@/infrastructure/database/prisma-mfa-repository";
 import { getPrismaClient } from "@/infrastructure/database/prisma-client";
@@ -43,8 +49,16 @@ import {
   generateSlugSuffix,
 } from "@/infrastructure/security/token-service";
 
-/** Monta os casos de uso de autenticação com as implementações concretas. */
-export function buildAuthServices(prisma: PrismaClient, keys: ApplicationKeys, now: () => Date = () => new Date()) {
+/**
+ * Monta os casos de uso com as implementações concretas. `storage` nulo deixa
+ * o envio de arquivos desligado (ambiente sem storage configurado).
+ */
+export function buildAuthServices(
+  prisma: PrismaClient,
+  keys: ApplicationKeys,
+  now: () => Date = () => new Date(),
+  storage: StorageProvider | null = null,
+) {
   const identity = createPrismaIdentityRepository(prisma);
   const audit = createPrismaAuditLogger(prisma);
   const sessions = createSessionManager({
@@ -87,6 +101,13 @@ export function buildAuthServices(prisma: PrismaClient, keys: ApplicationKeys, n
     documents: createDocumentManagement({ repository: documents, audit, now }),
     expirations,
     dashboard: createDashboardQueries({ repository: createPrismaDashboardRepository(prisma), expirations, now }),
+    documentFiles: createDocumentFileManagement({
+      repository: createPrismaDocumentFileRepository(prisma),
+      storage,
+      audit,
+      now,
+      newId: randomUUID,
+    }),
     catalog: createCatalogQueries({ repository: billingCatalog, now }),
     subscriptions: createSubscriptionUseCases({
       repository: createPrismaSubscriptionRepository(prisma),
@@ -115,6 +136,15 @@ export type AuthServices = ReturnType<typeof buildAuthServices>;
 let cachedServices: AuthServices | undefined;
 
 export function getAuthServices(): AuthServices {
-  cachedServices ??= buildAuthServices(getPrismaClient(), getEnv());
+  if (!cachedServices) {
+    const env = getEnv();
+    const storage = storageConfigFrom(env);
+    cachedServices = buildAuthServices(
+      getPrismaClient(),
+      env,
+      () => new Date(),
+      storage ? createS3StorageProvider(storage) : null,
+    );
+  }
   return cachedServices;
 }

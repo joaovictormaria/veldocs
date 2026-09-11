@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getEnv } from "@/infrastructure/config/env";
 import { buildSecurityHeaders, generateNonce } from "@/infrastructure/http/security-headers";
+import { storageBrowserOrigin, storageConfigFrom } from "@/infrastructure/storage/storage-config";
 
 /**
  * Aplica os headers de segurança e propaga um id de requisição.
@@ -11,10 +12,14 @@ import { buildSecurityHeaders, generateNonce } from "@/infrastructure/http/secur
  */
 export default function proxy(request: NextRequest) {
   const nonce = generateNonce();
+  const env = getEnv();
+  const storage = storageConfigFrom(env);
   const headers = buildSecurityHeaders({
     nonce,
     isDevelopment: process.env.NODE_ENV === "development",
-    isHttps: getEnv().APP_URL.startsWith("https://"),
+    isHttps: env.APP_URL.startsWith("https://"),
+    // O navegador envia arquivos direto ao bucket (URL assinada): só essa origem é liberada.
+    connectSources: storage ? [storageBrowserOrigin(storage)] : [],
   });
   const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
 

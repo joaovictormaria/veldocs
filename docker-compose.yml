@@ -23,6 +23,47 @@ services:
       timeout: 5s
       retries: 20
 
+  # Storage S3 compatível para desenvolvimento local e testes (FASE 5). Em
+  # produção o storage é o Railway Storage Buckets. Versão fixa: a mesma do CI.
+  # O MinIO parou de publicar no Docker Hub; o registry oficial é o quay.io.
+  storage:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: veldocs-storage
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY_ID:-veldocs}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_ACCESS_KEY:-veldocs_storage_dev_only}
+    ports:
+      # Exposto apenas em loopback: API em 9010 e console em 9011.
+      - "127.0.0.1:9010:9000"
+      - "127.0.0.1:9011:9001"
+    volumes:
+      - veldocs-storage-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Cria os buckets de desenvolvimento e de testes e termina.
+  storage-init:
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    container_name: veldocs-storage-init
+    depends_on:
+      storage:
+        condition: service_healthy
+    entrypoint: >-
+      sh -c "mc alias set local http://storage:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}
+      && mc mb --ignore-existing local/$${DEV_BUCKET}
+      && mc mb --ignore-existing local/$${TEST_BUCKET}"
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY_ID:-veldocs}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_ACCESS_KEY:-veldocs_storage_dev_only}
+      DEV_BUCKET: ${STORAGE_BUCKET:-veldocs-dev}
+      TEST_BUCKET: ${TEST_STORAGE_BUCKET:-veldocs-test}
+    restart: "no"
+
   # Aplicação em modo desenvolvimento (recarga automática).
   #
   # O código NÃO é montado do host: em Windows o watcher do Turbopack não
@@ -41,12 +82,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
     env_file: .env
     environment:
       # Dentro da rede do compose o banco é o serviço `postgres`, não o loopback.
       DATABASE_URL: postgresql://${POSTGRES_USER:-veldocs}:${POSTGRES_PASSWORD:-veldocs_dev_only}@postgres:5432/${POSTGRES_DB:-veldocs_dev}
       APP_URL: http://localhost:3000
       APP_ENV: development
+      # O servidor fala com o storage pela rede do compose; o navegador, pelo loopback.
+      STORAGE_ENDPOINT: http://storage:9000
+      STORAGE_PUBLIC_ENDPOINT: http://127.0.0.1:9010
     ports:
       - "127.0.0.1:3000:3000"
     develop:
@@ -76,3 +122,4 @@ services:
 
 volumes:
   veldocs-postgres-data:
+  veldocs-storage-data:

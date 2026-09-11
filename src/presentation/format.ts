@@ -21,6 +21,13 @@ export function formatCalendarDate(value: string): string {
   return calendarDate.format(new Date(`${value}T00:00:00.000Z`));
 }
 
+/** Tamanho de arquivo legível: "512 bytes", "48 KB", "2,4 MB". */
+export function formatBytes(size: number): string {
+  if (size < 1024) return `${size} bytes`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB`;
+}
+
 export function pluralizeDays(days: number): string {
   return days === 1 ? "1 dia restante" : `${days} dias restantes`;
 }

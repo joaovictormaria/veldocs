@@ -68,6 +68,7 @@ model Company {
   documentCategories DocumentCategory[]
   documents          Document[]
   tags               Tag[]
+  documentFiles      DocumentFile[]
   auditLogs          AuditLog[]
   modules            CompanyModule[]
   subscription       Subscription?
@@ -188,6 +189,7 @@ model Membership {
   roles                UserRole[]
   responsibleDocuments Document[]          @relation("DocumentResponsibleMember")
   createdDocuments     Document[]          @relation("DocumentCreatedByMember")
+  uploadedFiles        DocumentFile[]      @relation("DocumentFileUploader")
   actorAuditLogs       AuditLog[]          @relation("AuditLogActorMembership")
   activeSessions       Session[]
   sentInvitations      CompanyInvitation[] @relation("InvitationInviter")
@@ -315,6 +317,7 @@ model Document {
   responsibleMember Membership?       @relation("DocumentResponsibleMember", fields: [companyId, responsibleUserId], references: [companyId, userId], onDelete: Restrict)
   createdByMember   Membership?       @relation("DocumentCreatedByMember", fields: [companyId, createdById], references: [companyId, userId], onDelete: Restrict)
   tags              DocumentTag[]
+  files             DocumentFile[]
 
   @@unique([companyId, id])
   @@index([companyId, expirationDate])
@@ -358,6 +361,47 @@ model DocumentTag {
   @@id([companyId, documentId, tagId])
   @@index([companyId, tagId])
   @@map("document_tags")
+}
+
+/// Situação do arquivo enviado (FASE 5).
+enum DocumentFileStatus {
+  /// URL de envio emitida; o arquivo ainda não foi conferido.
+  PENDING
+  /// Conferido: tamanho e assinatura batem com o declarado.
+  AVAILABLE
+  /// Recusado na conferência; o objeto é apagado do bucket.
+  REJECTED
+}
+
+/// Arquivo de um documento. O conteúdo fica no bucket privado; aqui ficam só
+/// os metadados. A chave do objeto é feita de ids internos — nunca do nome
+/// original — e um CHECK garante que ela pertence à empresa da linha.
+model DocumentFile {
+  id              String             @id @default(uuid(7)) @db.Uuid
+  companyId       String             @map("company_id") @db.Uuid
+  documentId      String             @map("document_id") @db.Uuid
+  objectKey       String             @unique @map("object_key") @db.VarChar(255)
+  /// Nome já higienizado, só para exibição e download.
+  fileName        String             @map("file_name") @db.VarChar(160)
+  contentType     String             @map("content_type") @db.VarChar(100)
+  sizeBytes       Int                @map("size_bytes")
+  status          DocumentFileStatus @default(PENDING)
+  rejectionReason String?            @map("rejection_reason") @db.VarChar(200)
+  uploadedById    String             @map("uploaded_by_id") @db.Uuid
+  /// Depois disso a URL de envio não vale mais e o PENDING pode ser descartado.
+  uploadExpiresAt DateTime           @map("upload_expires_at") @db.Timestamptz(3)
+  availableAt     DateTime?          @map("available_at") @db.Timestamptz(3)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime?          @map("deleted_at") @db.Timestamptz(3)
+
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  document   Document   @relation(fields: [companyId, documentId], references: [companyId, id], onDelete: Restrict)
+  uploadedBy Membership @relation("DocumentFileUploader", fields: [companyId, uploadedById], references: [companyId, userId], onDelete: Restrict)
+
+  @@unique([companyId, id])
+  @@index([companyId, documentId, status])
+  @@map("document_files")
 }
 
 /// Trilha de auditoria append-only. `companyId` é opcional para eventos sem

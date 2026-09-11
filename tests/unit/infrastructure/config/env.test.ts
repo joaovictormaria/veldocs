@@ -22,9 +22,51 @@ const deployed = {
   APP_HMAC_KEY: TEST_HMAC_KEY,
 };
 
+const localStorage = {
+  STORAGE_ENDPOINT: "http://127.0.0.1:9010",
+  STORAGE_BUCKET: "veldocs-dev",
+  STORAGE_ACCESS_KEY_ID: "veldocs",
+  STORAGE_SECRET_ACCESS_KEY: "veldocs_storage_dev_only",
+};
+
 describe("parseEnv", () => {
   it("aceita uma configuração válida de development", () => {
-    expect(parseEnv(development)).toEqual(development);
+    // Sem storage configurado: região e estilo de endereço ficam nos padrões.
+    expect(parseEnv(development)).toEqual({ ...development, STORAGE_REGION: "auto", STORAGE_FORCE_PATH_STYLE: false });
+  });
+
+  describe("storage de arquivos", () => {
+    it("é opcional: sem nenhuma variável, o upload fica desligado", () => {
+      const env = parseEnv(development);
+      expect(env.STORAGE_ENDPOINT).toBeUndefined();
+      expect(env.STORAGE_BUCKET).toBeUndefined();
+    });
+
+    it("aceita o MinIO local com endereço por caminho", () => {
+      const env = parseEnv({ ...development, ...localStorage, STORAGE_REGION: "us-east-1", STORAGE_FORCE_PATH_STYLE: "true" });
+      expect(env).toMatchObject({ STORAGE_BUCKET: "veldocs-dev", STORAGE_REGION: "us-east-1", STORAGE_FORCE_PATH_STYLE: true });
+    });
+
+    it("configuração pela metade aponta cada variável que falta", () => {
+      expect(() => parseEnv({ ...development, STORAGE_ENDPOINT: "http://127.0.0.1:9010" })).toThrow(
+        /STORAGE_BUCKET: obrigatória[\s\S]*STORAGE_ACCESS_KEY_ID[\s\S]*STORAGE_SECRET_ACCESS_KEY/,
+      );
+    });
+
+    it("recusa nome de bucket inválido e estilo de endereço desconhecido", () => {
+      expect(() => parseEnv({ ...development, ...localStorage, STORAGE_BUCKET: "Bucket_Invalido" })).toThrow(/STORAGE_BUCKET/);
+      expect(() => parseEnv({ ...development, STORAGE_FORCE_PATH_STYLE: "sim" })).toThrow(/STORAGE_FORCE_PATH_STYLE/);
+    });
+
+    it.each(["staging", "production"] as const)("em %s exige https e bloqueia a senha local", (appEnv) => {
+      expect(() =>
+        parseEnv({ ...deployed, ...localStorage, APP_ENV: appEnv, STORAGE_SECRET_ACCESS_KEY: "chave-do-railway" }),
+      ).toThrow(/STORAGE_ENDPOINT: deve usar https/);
+
+      expect(() =>
+        parseEnv({ ...deployed, ...localStorage, APP_ENV: appEnv, STORAGE_ENDPOINT: "https://storage.railway.example" }),
+      ).toThrow(/STORAGE_SECRET_ACCESS_KEY: credenciais locais de desenvolvimento/);
+    });
   });
 
   it("usa development e info como padrão para APP_ENV e LOG_LEVEL", () => {

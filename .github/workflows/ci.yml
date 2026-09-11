@@ -45,6 +45,14 @@ jobs:
       TEST_DATABASE_URL: postgresql://veldocs:veldocs_ci_only@localhost:5432/veldocs_test
       APP_ENCRYPTION_KEY: Y2ktb25seS1lbmNyeXB0aW9uLWtleS0zMmJ5dGVzISE=
       APP_HMAC_KEY: Y2ktb25seS1obWFjLWtleS1ub3QtYS1zZWNyZXQtIyMj
+      # Storage S3 compatível (MinIO) exclusivo do CI.
+      STORAGE_ENDPOINT: http://127.0.0.1:9010
+      STORAGE_REGION: us-east-1
+      STORAGE_BUCKET: veldocs-ci
+      STORAGE_ACCESS_KEY_ID: veldocs
+      STORAGE_SECRET_ACCESS_KEY: veldocs_storage_ci_only
+      STORAGE_FORCE_PATH_STYLE: "true"
+      TEST_STORAGE_BUCKET: veldocs-test
 
     steps:
       - name: Checkout
@@ -75,6 +83,17 @@ jobs:
 
       - name: Criar banco de testes
         run: psql "$DATABASE_URL" -c "CREATE DATABASE veldocs_test"
+
+      # `services` não aceita o comando do MinIO: o container sobe num passo.
+      - name: Storage S3 (MinIO) para integração e E2E
+        run: |
+          docker run -d --name veldocs-storage -p 9010:9000 \
+            -e MINIO_ROOT_USER="$STORAGE_ACCESS_KEY_ID" -e MINIO_ROOT_PASSWORD="$STORAGE_SECRET_ACCESS_KEY" \
+            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:9010/minio/health/live && break; sleep 1; done
+          docker run --rm --network host --entrypoint sh quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z -c \
+            "mc alias set local http://127.0.0.1:9010 $STORAGE_ACCESS_KEY_ID $STORAGE_SECRET_ACCESS_KEY \
+            && mc mb --ignore-existing local/$STORAGE_BUCKET && mc mb --ignore-existing local/$TEST_STORAGE_BUCKET"
 
       - name: Testes de integração
         run: pnpm test:integration

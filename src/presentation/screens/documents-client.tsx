@@ -14,6 +14,7 @@ import {
   parseTagsInput,
 } from "@/presentation/documents";
 import { formatCalendarDate } from "@/presentation/format";
+import { DocumentFiles } from "./document-files";
 
 export interface DocumentItem {
   readonly id: string;
@@ -56,6 +57,8 @@ export interface DocumentsData {
   readonly expirations: boolean;
   /** Filtros vindos da URL (links do painel), já conferidos pela página. */
   readonly initialFilters: { readonly status: string; readonly categoryId: string };
+  /** Storage de arquivos configurado neste ambiente. */
+  readonly filesEnabled: boolean;
 }
 
 const SELECT_CLASS =
@@ -567,6 +570,14 @@ function DocumentForm({
               onChange={(event) => set({ tags: event.target.value })}
             />
           </div>
+        </div>
+
+        <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
+          {document ? (
+            <DocumentFiles documentId={document.id} enabled={data.filesEnabled} canEdit={data.can.update} />
+          ) : (
+            <p className="text-sm text-slate-600 dark:text-slate-400">Salve o documento para anexar arquivos.</p>
+          )}
         </div>
 
         {error ? (
