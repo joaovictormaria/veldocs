@@ -10,6 +10,10 @@ export default defineConfig({
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
   reporter: isCI ? "github" : "list",
+  // As telas são renderizadas no servidor (sessão, autorização e consultas a
+  // cada navegação). Com a suíte inteira em paralelo, os 5 s padrão do expect
+  // estouravam em navegações encadeadas sem que houvesse defeito.
+  expect: { timeout: 15_000 },
   use: {
     baseURL,
     trace: "on-first-retry",

@@ -5,13 +5,19 @@ import { auditContext, type RequestContext } from "@/application/auth/shared";
 import type { AuditLogger } from "@/application/ports/audit-logger";
 import {
   type DocumentInput,
-  type DocumentPage,
   type DocumentRecord,
   DocumentReferenceError,
   type DocumentRepository,
   type TagRecord,
 } from "@/application/ports/document-repository";
 import { calendarDateSchema } from "@/domain/documents/document-dates";
+import {
+  EXPIRATION_STATUSES,
+  EXPIRING_WINDOW_DAYS,
+  type ExpirationStatus,
+  expirationStatus,
+  todayInBrazil,
+} from "@/domain/documents/expiration";
 import { normalizeSearchText, searchTerms } from "@/domain/documents/search-text";
 import { MAX_TAG_LENGTH, MAX_TAGS_PER_DOCUMENT, prepareTags } from "@/domain/documents/tags";
 
@@ -60,10 +66,22 @@ export const documentQuerySchema = z.object({
   responsibleUserId: reference("responsável não encontrado"),
   branchId: reference("filial não encontrada"),
   departmentId: reference("setor não encontrado"),
-  sort: z.enum(["recent", "title", "created"]).default("recent"),
+  /** Situação de vencimento: só vale com o módulo Controle de vencimentos. */
+  status: optional(z.enum(EXPIRATION_STATUSES)),
+  sort: z.enum(["recent", "title", "created", "expiration"]).default("recent"),
   page: z.coerce.number().int().min(1).max(10_000).default(1),
   pageSize: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
 });
+
+/** Documento da listagem; a situação de vencimento só vem com o módulo. */
+export type ListedDocument = DocumentRecord & { readonly expirationStatus?: ExpirationStatus };
+
+export interface DocumentListPage {
+  readonly items: readonly ListedDocument[];
+  readonly total: number;
+  readonly page: number;
+  readonly pageSize: number;
+}
 
 const issuesOf = (error: z.ZodError): ValidationIssue[] =>
   error.issues.map((issue) => ({ field: issue.path.join(".") || "(raiz)", message: issue.message }));
@@ -134,17 +152,43 @@ export function createDocumentManagement(deps: {
   };
 
   return {
-    async list(context: AuthorizedContext, rawQuery: unknown): Promise<WriteResult<DocumentPage>> {
+    /**
+     * `options.expirations` diz se a empresa tem o módulo Controle de
+     * vencimentos: sem ele, a situação não é calculada nem filtrada, e ordenar
+     * por vencimento cai na ordem padrão.
+     */
+    async list(
+      context: AuthorizedContext,
+      rawQuery: unknown,
+      options: { readonly expirations: boolean } = { expirations: false },
+    ): Promise<WriteResult<DocumentListPage>> {
       const query = documentQuerySchema.safeParse(withoutEmptyValues(rawQuery));
       if (!query.success) return invalid(issuesOf(query.error));
 
-      const { q, tag, ...rest } = query.data;
+      const { q, tag, status, sort, ...rest } = query.data;
+      const today = todayInBrazil(deps.now());
       const page = await deps.repository.listDocuments(context.companyId, {
         ...rest,
         terms: q ? searchTerms(q) : [],
         tag: tag ? normalizeSearchText(tag) : null,
+        expirationStatus: options.expirations ? status : null,
+        today,
+        expiringWindowDays: EXPIRING_WINDOW_DAYS,
+        sort: !options.expirations && sort === "expiration" ? "recent" : sort,
       });
-      return { ok: true, data: page };
+
+      return {
+        ok: true,
+        data: {
+          ...page,
+          items: options.expirations
+            ? page.items.map((document) => ({
+                ...document,
+                expirationStatus: expirationStatus(document.expirationDate, today),
+              }))
+            : page.items,
+        },
+      };
     },
 
     find: (context: AuthorizedContext, documentId: string) =>

@@ -14,6 +14,7 @@ import {
 } from "@/application/ports/document-repository";
 import { fitsUnder, isDescendantOf, toNodeMap } from "@/domain/documents/category-tree";
 import { toCalendarDate, toIsoDate } from "@/domain/documents/document-dates";
+import { expiringWindowEnd } from "@/domain/documents/expiration";
 import { buildSearchText, normalizeSearchText } from "@/domain/documents/search-text";
 import { prepareTags } from "@/domain/documents/tags";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
@@ -59,7 +60,31 @@ const ORDER: Record<DocumentFilter["sort"], Prisma.DocumentOrderByWithRelationIn
   recent: { updatedAt: "desc" },
   title: { title: "asc" },
   created: { createdAt: "desc" },
+  // Quem vence antes primeiro; sem validade vai para o fim.
+  expiration: { expirationDate: { sort: "asc", nulls: "last" } },
 };
+
+/**
+ * Situação de vencimento vira intervalo de datas no banco (MASTER SPEC 10.2):
+ * a situação é derivada, então nunca há coluna de status para filtrar.
+ */
+function expirationWhere(filter: DocumentFilter): Prisma.DocumentWhereInput {
+  if (filter.expirationStatus === null) return {};
+
+  const today = toCalendarDate(filter.today);
+  const windowEnd = toCalendarDate(expiringWindowEnd(filter.today, filter.expiringWindowDays));
+
+  switch (filter.expirationStatus) {
+    case "EXPIRED":
+      return { expirationDate: { lt: today } };
+    case "EXPIRING":
+      return { expirationDate: { gte: today, lte: windowEnd } };
+    case "VALID":
+      return { expirationDate: { gt: windowEnd } };
+    case "NO_EXPIRATION":
+      return { expirationDate: null };
+  }
+}
 
 /**
  * Documentos, categorias e etiquetas.
@@ -300,6 +325,7 @@ export function createPrismaDocumentRepository(prisma: PrismaClient): DocumentRe
         ...(filter.departmentId ? { departmentId: filter.departmentId } : {}),
         ...(filter.responsibleUserId ? { responsibleUserId: filter.responsibleUserId } : {}),
         ...(filter.tag ? { tags: { some: { tag: { normalizedName: filter.tag } } } } : {}),
+        ...expirationWhere(filter),
         // Todos os termos precisam aparecer; o texto já está sem acento.
         ...(filter.terms.length > 0 ? { AND: filter.terms.map((term) => ({ searchText: { contains: term } })) } : {}),
       };
@@ -399,6 +425,48 @@ export function createPrismaDocumentRepository(prisma: PrismaClient): DocumentRe
 
         return findDocumentRow(tx, companyId, documentId);
       });
+    },
+
+    async summarizeExpirations(companyId, options) {
+      const live: Prisma.DocumentWhereInput = { companyId, deletedAt: null };
+      const today = toCalendarDate(options.today);
+      const windowEnd = toCalendarDate(options.windowEnd);
+
+      const [total, expired, expiring, withoutExpiration, upcoming] = await Promise.all([
+        prisma.document.count({ where: live }),
+        prisma.document.count({ where: { ...live, expirationDate: { lt: today } } }),
+        prisma.document.count({ where: { ...live, expirationDate: { gte: today, lte: windowEnd } } }),
+        prisma.document.count({ where: { ...live, expirationDate: null } }),
+        prisma.document.findMany({
+          where: { ...live, expirationDate: { lte: windowEnd } },
+          orderBy: [{ expirationDate: "asc" }, { id: "desc" }],
+          take: options.limit,
+          select: documentSelect,
+        }),
+      ]);
+
+      return {
+        counts: {
+          valid: total - expired - expiring - withoutExpiration,
+          expiring,
+          expired,
+          withoutExpiration,
+          total,
+        },
+        upcoming: upcoming.map(toDocument),
+      };
+    },
+
+    async renewDocument(companyId, documentId, input, at) {
+      const { count } = await prisma.document.updateMany({
+        where: { id: documentId, companyId, deletedAt: null },
+        data: {
+          issueDate: toDateColumn(input.issueDate),
+          expirationDate: toDateColumn(input.expirationDate),
+          updatedAt: at,
+        },
+      });
+      return count === 0 ? null : findDocumentRow(prisma, companyId, documentId);
     },
 
     async deleteDocument(companyId, documentId, at) {

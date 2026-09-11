@@ -20,6 +20,8 @@ export const PERMISSION_CATALOG = {
   "documents.create": "Criar documentos",
   "documents.update": "Editar documentos",
   "documents.delete": "Excluir documentos",
+  "expirations.read": "Ver a situação de vencimento dos documentos",
+  "expirations.manage": "Renovar documentos e atualizar prazos",
   "audit.read": "Ver a trilha de auditoria",
   "billing.read": "Ver módulos, kits, preços e a assinatura da empresa",
   "billing.manage": "Escolher módulos e kits e iniciar o trial",
@@ -35,6 +37,8 @@ const READ_ONLY: readonly CatalogPermission[] = [
   "departments.read",
   "categories.read",
   "documents.read",
+  // Só vale com o módulo Controle de vencimentos contratado (entitlement).
+  "expirations.read",
 ];
 
 export const SYSTEM_ROLE_KEYS = ["OWNER", "ADMIN", "GESTOR", "COLABORADOR", "VISUALIZADOR"] as const;
@@ -75,6 +79,7 @@ export const SYSTEM_ROLES: Readonly<Record<SystemRoleKey, SystemRoleDefinition>>
       "documents.create",
       "documents.update",
       "documents.delete",
+      "expirations.manage",
       "audit.read",
     ],
     requiresMfa: false,
@@ -83,7 +88,7 @@ export const SYSTEM_ROLES: Readonly<Record<SystemRoleKey, SystemRoleDefinition>>
     key: "COLABORADOR",
     name: "Colaborador",
     description: "Cria e atualiza documentos",
-    permissions: [...READ_ONLY, "documents.create", "documents.update"],
+    permissions: [...READ_ONLY, "documents.create", "documents.update", "expirations.manage"],
     requiresMfa: false,
   },
   VISUALIZADOR: {

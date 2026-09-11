@@ -17,10 +17,15 @@ describe("módulo de cada permissão", () => {
     }
   });
 
-  it("as permissões existentes são todas do Core", () => {
-    // As capacidades dos módulos pagos ainda não existem; quando existirem,
-    // cada uma trará suas permissões e este teste deixa de valer.
-    expect(new Set(Object.values(PERMISSION_MODULE))).toEqual(new Set([CORE_MODULE_KEY]));
+  it("a gestão documental é do Core e o controle de vencimentos é do módulo pago", () => {
+    const byModule = (module: string) =>
+      ALL_PERMISSIONS.filter((permission) => moduleOfPermission(permission) === module).sort();
+
+    expect(byModule("vencimentos")).toEqual(["expirations.manage", "expirations.read"]);
+    // Todo o resto continua no Core: quem não paga módulo nenhum usa o sistema.
+    expect(byModule(CORE_MODULE_KEY)).toEqual(
+      ALL_PERMISSIONS.filter((permission) => !permission.startsWith("expirations.")).sort(),
+    );
   });
 
   it("as chaves de módulo vêm do catálogo comercial", () => {

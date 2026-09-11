@@ -1,3 +1,5 @@
+import type { ExpirationStatus } from "@/domain/documents/expiration";
+
 /** Categoria superior inexistente, de outra empresa ou já excluída. */
 export class CategoryNotFoundError extends Error {
   constructor() {
@@ -99,7 +101,7 @@ export interface DocumentInput {
   readonly tags: readonly string[];
 }
 
-export type DocumentSort = "recent" | "title" | "created";
+export type DocumentSort = "recent" | "title" | "created" | "expiration";
 
 export interface DocumentFilter {
   /** Todos os termos precisam aparecer no texto pesquisável do documento. */
@@ -110,9 +112,27 @@ export interface DocumentFilter {
   readonly responsibleUserId: string | null;
   readonly branchId: string | null;
   readonly departmentId: string | null;
+  /** Situação de vencimento; só chega aqui com o módulo contratado. */
+  readonly expirationStatus: ExpirationStatus | null;
+  /** Hoje em Brasília (`AAAA-MM-DD`): a situação é comparada com ele. */
+  readonly today: string;
+  readonly expiringWindowDays: number;
   readonly sort: DocumentSort;
   readonly page: number;
   readonly pageSize: number;
+}
+
+export interface ExpirationCounts {
+  readonly valid: number;
+  readonly expiring: number;
+  readonly expired: number;
+  readonly withoutExpiration: number;
+  readonly total: number;
+}
+
+export interface RenewalInput {
+  readonly issueDate: string | null;
+  readonly expirationDate: string;
 }
 
 export interface DocumentPage {
@@ -157,6 +177,23 @@ export interface DocumentRepository {
     at: Date,
   ): Promise<DocumentRecord | null>;
   deleteDocument(companyId: string, documentId: string, at: Date): Promise<boolean>;
+
+  /**
+   * Contagem por situação de vencimento e os documentos que vencem antes
+   * (vencidos primeiro), para o painel do módulo Controle de vencimentos.
+   */
+  summarizeExpirations(
+    companyId: string,
+    options: { readonly today: string; readonly windowEnd: string; readonly limit: number },
+  ): Promise<{ readonly counts: ExpirationCounts; readonly upcoming: readonly DocumentRecord[] }>;
+
+  /** Renovação: troca só as datas do documento, sem mexer no resto. */
+  renewDocument(
+    companyId: string,
+    documentId: string,
+    input: RenewalInput,
+    at: Date,
+  ): Promise<DocumentRecord | null>;
 
   /** Etiquetas com pelo menos um documento vivo, em ordem alfabética. */
   listTags(companyId: string): Promise<TagRecord[]>;

@@ -13,6 +13,7 @@ import { createCatalogQueries } from "@/application/billing/catalog-queries";
 import { createSubscriptionUseCases } from "@/application/billing/subscription-use-cases";
 import { createCategoryManagement } from "@/application/documents/manage-categories";
 import { createDocumentManagement } from "@/application/documents/manage-documents";
+import { createExpirationManagement } from "@/application/documents/manage-expirations";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { createDatabaseEntitlementService } from "@/infrastructure/access/database-entitlements";
 import { getEnv } from "@/infrastructure/config/env";
@@ -63,18 +64,15 @@ export function buildAuthServices(prisma: PrismaClient, keys: ApplicationKeys, n
   const billingCatalog = createPrismaBillingCatalogRepository(prisma);
   const mfa = createPrismaMfaRepository(prisma, keys);
   const documents = createPrismaDocumentRepository(prisma);
+  const entitlements = createDatabaseEntitlementService(prisma, now);
 
   return {
     login: createLoginUseCase(dependencies),
     register: createRegisterUseCase({ ...dependencies, randomSlugSuffix: generateSlugSuffix }),
     ...createSessionUseCases({ sessions, identity, access, mfa, audit }),
-    authorize: createAuthorizer({
-      sessions,
-      identity,
-      access,
-      mfa,
-      entitlements: createDatabaseEntitlementService(prisma, now),
-    }),
+    authorize: createAuthorizer({ sessions, identity, access, mfa, entitlements }),
+    /** Exposto para as rotas que mudam a resposta conforme o módulo contratado. */
+    entitlements,
     selectActiveCompany: createSelectActiveCompany({ sessions, identity, access, audit }),
     company: createCompanyQueries(createPrismaCompanyDirectory(prisma)),
     companyManagement: createCompanyManagement({
@@ -84,6 +82,7 @@ export function buildAuthServices(prisma: PrismaClient, keys: ApplicationKeys, n
     }),
     categories: createCategoryManagement({ repository: documents, audit, now }),
     documents: createDocumentManagement({ repository: documents, audit, now }),
+    expirations: createExpirationManagement({ repository: documents, audit, now }),
     catalog: createCatalogQueries({ repository: billingCatalog, now }),
     subscriptions: createSubscriptionUseCases({
       repository: createPrismaSubscriptionRepository(prisma),

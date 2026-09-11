@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { TRIAL_DAYS } from "@/domain/billing/subscription-status";
+import { EXPIRATIONS_MODULE_KEY } from "@/domain/documents/expiration";
 import { getAuthServices } from "@/infrastructure/composition/auth-services";
 import { getEnv } from "@/infrastructure/config/env";
 import { readSessionToken } from "@/infrastructure/http/session-cookie";
@@ -43,10 +44,11 @@ export default async function BuilderPage() {
     );
   }
 
-  const [modules, kits, subscription] = await Promise.all([
+  const [modules, kits, subscription, entitlement] = await Promise.all([
     services.catalog.listCatalog(),
     services.catalog.listKits(),
     services.subscriptions.getSummary(authorization.context),
+    services.entitlements.checkModule(authorization.context.companyId, EXPIRATIONS_MODULE_KEY),
   ]);
 
   // Props de Client Component precisam ser serializáveis: as datas viram texto ISO.
@@ -55,7 +57,7 @@ export default async function BuilderPage() {
   ) as BuilderData;
 
   return (
-    <AppShell {...shell}>
+    <AppShell {...shell} hasExpirations={entitlement === "enabled"}>
       <BuilderClient data={data} />
     </AppShell>
   );

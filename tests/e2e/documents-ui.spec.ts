@@ -68,7 +68,7 @@ test("categoria e documento pela tela: criar, buscar, editar e excluir", async (
   await expect(lista).toContainText("Ficha de Admissão");
   await expect(lista).toContainText("Admissão");
   await expect(lista).toContainText("Urgente");
-  await expect(lista).toContainText("Vence em 01/02/2027");
+  await expect(lista).toContainText("Validade: 01/02/2027");
   await expect(lista).toContainText("Pessoa dos Documentos");
   await expect(page.getByTestId("resumo-pagina")).toHaveText("1-1 de 1");
 

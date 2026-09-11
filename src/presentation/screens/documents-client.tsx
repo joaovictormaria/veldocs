@@ -3,7 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage, fieldErrors } from "@/presentation/api-client";
 import { Alert, Button, CARD, Field } from "@/presentation/components/ui";
-import { type DocumentFilters, documentsQuery, EMPTY_FILTERS, formatTagsInput, pageSummary, parseTagsInput } from "@/presentation/documents";
+import {
+  type DocumentFilters,
+  documentsQuery,
+  EMPTY_FILTERS,
+  EXPIRATION_CHIPS,
+  EXPIRATION_LABELS,
+  formatTagsInput,
+  pageSummary,
+  parseTagsInput,
+} from "@/presentation/documents";
 import { formatCalendarDate } from "@/presentation/format";
 
 export interface DocumentItem {
@@ -16,6 +25,8 @@ export interface DocumentItem {
   readonly responsible: { readonly userId: string; readonly name: string } | null;
   readonly issueDate: string | null;
   readonly expirationDate: string | null;
+  /** Só vem com o módulo Controle de vencimentos contratado. */
+  readonly expirationStatus?: string;
   readonly tags: readonly string[];
 }
 
@@ -41,6 +52,8 @@ export interface DocumentsData {
   readonly members: ReadonlyArray<{ readonly userId: string; readonly name: string }>;
   readonly tags: ReadonlyArray<{ readonly name: string; readonly documentCount: number }>;
   readonly can: { readonly create: boolean; readonly update: boolean; readonly remove: boolean };
+  /** Empresa tem o módulo Controle de vencimentos: situação e filtro aparecem. */
+  readonly expirations: boolean;
 }
 
 const SELECT_CLASS =
@@ -177,22 +190,41 @@ function DocumentsBrowser({ data }: { readonly data: DocumentsData }) {
               { value: "recent", label: "Atualizados primeiro" },
               { value: "title", label: "Título (A–Z)" },
               { value: "created", label: "Mais recentes" },
+              ...(data.expirations ? [{ value: "expiration", label: "Vencimento mais próximo" }] : []),
             ]}
           />
         </div>
 
-        {data.members.length > 0 ? (
-          <div className="mt-4 sm:max-w-xs">
-            <Select
-              id="filtro-responsavel"
-              label="Responsável"
-              value={filters.responsibleUserId}
-              onChange={(value) => update({ responsibleUserId: value })}
-              options={[
-                { value: "", label: "Qualquer pessoa" },
-                ...data.members.map((member) => ({ value: member.userId, label: member.name })),
-              ]}
-            />
+        {data.members.length > 0 || data.expirations ? (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:max-w-2xl">
+            {data.expirations ? (
+              <Select
+                id="filtro-situacao"
+                label="Situação"
+                value={filters.status}
+                onChange={(value) => update({ status: value })}
+                options={[
+                  { value: "", label: "Todas" },
+                  { value: "EXPIRED", label: EXPIRATION_LABELS.EXPIRED as string },
+                  { value: "EXPIRING", label: EXPIRATION_LABELS.EXPIRING as string },
+                  { value: "VALID", label: EXPIRATION_LABELS.VALID as string },
+                  { value: "NO_EXPIRATION", label: EXPIRATION_LABELS.NO_EXPIRATION as string },
+                ]}
+              />
+            ) : null}
+
+            {data.members.length > 0 ? (
+              <Select
+                id="filtro-responsavel"
+                label="Responsável"
+                value={filters.responsibleUserId}
+                onChange={(value) => update({ responsibleUserId: value })}
+                options={[
+                  { value: "", label: "Qualquer pessoa" },
+                  ...data.members.map((member) => ({ value: member.userId, label: member.name })),
+                ]}
+              />
+            ) : null}
           </div>
         ) : null}
       </section>
@@ -232,8 +264,22 @@ function DocumentsBrowser({ data }: { readonly data: DocumentsData }) {
                   <span className="text-slate-600 dark:text-slate-400">
                     {document.responsible ? document.responsible.name : "Sem responsável"}
                   </span>
-                  <span className="text-slate-600 dark:text-slate-400">
-                    {document.expirationDate ? `Vence em ${formatCalendarDate(document.expirationDate)}` : "Sem validade"}
+                  <span className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                    {document.expirationStatus ? (
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                          EXPIRATION_CHIPS[document.expirationStatus] ?? EXPIRATION_CHIPS.NO_EXPIRATION
+                        }`}
+                      >
+                        {EXPIRATION_LABELS[document.expirationStatus] ?? document.expirationStatus}
+                      </span>
+                    ) : null}
+                    {/* Texto sem tempo verbal: vale para data futura e para a já vencida. */}
+                    {document.expirationDate
+                      ? `Validade: ${formatCalendarDate(document.expirationDate)}`
+                      : document.expirationStatus
+                        ? null
+                        : "Sem validade"}
                   </span>
                   <span className="flex gap-1">
                     {data.can.update ? (

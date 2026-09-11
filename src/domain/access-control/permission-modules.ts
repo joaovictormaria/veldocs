@@ -7,9 +7,10 @@ import type { CatalogPermission } from "./system-roles";
  * (`domain/billing/module-catalog.ts`); aqui fica só a associação que o
  * código usa para exigir o entitlement correto.
  *
- * Todas as permissões de hoje são do Core: as capacidades dos módulos pagos
- * (vencimentos, funcionários, contratos...) ainda não existem e ganharão suas
- * permissões nas fases em que forem implementadas.
+ * A gestão documental é do Core. As capacidades de módulo pago aparecem aqui
+ * conforme são implementadas: `expirations.*` pertencem ao Controle de
+ * vencimentos, então só valem para quem contratou esse módulo — o perfil dá a
+ * permissão, o entitlement dá o módulo, e os dois precisam concordar.
  */
 export { CORE_MODULE_KEY, MODULE_KEYS, type ModuleKey };
 
@@ -32,6 +33,8 @@ export const PERMISSION_MODULE = {
   "documents.create": "core",
   "documents.update": "core",
   "documents.delete": "core",
+  "expirations.read": "vencimentos",
+  "expirations.manage": "vencimentos",
   "audit.read": "core",
   "billing.read": "core",
   "billing.manage": "core",

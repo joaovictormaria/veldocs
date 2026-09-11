@@ -90,6 +90,7 @@ Isso é **defesa em profundidade** — a autorização server-side por tenant co
 | Título não vazio e validade nunca antes da emissão | `documents_title_not_blank_chk`, `documents_dates_order_chk` | `documents_categories_tags` |
 | Categoria com nome não vazio e que não é filha de si mesma | `document_categories_name_not_blank_chk`, `document_categories_not_own_parent_chk` | `documents_categories_tags` |
 | Etiqueta com nome não vazio e nome normalizado em minúsculas, sem espaços nas pontas | `tags_name_not_blank_chk`, `tags_normalized_name_format_chk` | `documents_categories_tags` |
+| Permissões do Controle de vencimentos: leitura para os 5 perfis padrão, renovação para OWNER, ADMIN, GESTOR e COLABORADOR | `INSERT` em `permissions` e `INSERT … SELECT` em `role_permissions` | `expiration_permissions` |
 
 ## Migrações
 
@@ -104,6 +105,7 @@ Isso é **defesa em profundidade** — a autorização server-side por tenant co
 | `20260911054436_builder_trial_and_billing_permissions` | coluna `subscriptions.kit_key` (FK para `kits`) e permissões de assinatura para OWNER e ADMIN já existentes |
 | `20260911061303_members_invitations` | status `REMOVED` em `MembershipStatus` e tabela `company_invitations` |
 | `20260911173626_documents_categories_tags` | coluna `documents.search_text` (padrão `''`), tabelas `tags` e `document_tags` e os CHECKs do núcleo documental |
+| `20260911184354_expiration_permissions` | permissões `expirations.read` e `expirations.manage` (módulo Controle de vencimentos), concedidas aos perfis de sistema das empresas existentes |
 
 A preservação de dados da migração `identity_memberships_sessions` foi verificada em 2026-09-11 num banco descartável: migração 1 → dados no formato antigo (pessoas INVITED/ACTIVE/DISABLED, perfil, documento com responsável e criador, auditoria) → migração 2 → vínculos e status corretos, nenhum registro perdido.
 

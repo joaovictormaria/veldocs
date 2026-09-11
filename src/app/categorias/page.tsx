@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { MAX_CATEGORY_DEPTH } from "@/domain/documents/category-tree";
+import { EXPIRATIONS_MODULE_KEY } from "@/domain/documents/expiration";
 import { getAuthServices } from "@/infrastructure/composition/auth-services";
 import { getEnv } from "@/infrastructure/config/env";
 import { readSessionToken } from "@/infrastructure/http/session-cookie";
@@ -39,7 +40,10 @@ export default async function CategoriesPage() {
   }
 
   const { context } = authorization;
-  const categories = await services.categories.list(context);
+  const [categories, entitlement] = await Promise.all([
+    services.categories.list(context),
+    services.entitlements.checkModule(context.companyId, EXPIRATIONS_MODULE_KEY),
+  ]);
 
   const data = JSON.parse(
     JSON.stringify({
@@ -50,7 +54,7 @@ export default async function CategoriesPage() {
   ) as CategoriesData;
 
   return (
-    <AppShell {...shell}>
+    <AppShell {...shell} hasExpirations={entitlement === "enabled"}>
       <CategoriesClient data={data} />
     </AppShell>
   );
