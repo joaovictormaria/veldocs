@@ -132,3 +132,6 @@ export function Alert({ tone = "error", children }: { readonly tone?: keyof type
 }
 
 export const LINK_CLASS = "font-medium text-brand-primary hover:underline dark:text-brand-cyan";
+
+/** Cartão padrão das telas internas. */
+export const CARD = "rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900";

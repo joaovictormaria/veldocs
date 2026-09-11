@@ -12,7 +12,7 @@ export type ApiResult<T> =
 
 export async function api<T = unknown>(
   path: string,
-  init: { readonly method?: "GET" | "POST" | "PUT" | "DELETE"; readonly body?: unknown } = {},
+  init: { readonly method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; readonly body?: unknown } = {},
 ): Promise<ApiResult<T>> {
   let response: Response;
   try {

@@ -369,11 +369,11 @@ O objetivo é **mostrar valor**, e não pressionar o usuário.
 - 🔴 NÃO IMPLEMENTADO — Core modular
 - 🔴 NÃO IMPLEMENTADO — Catálogo de módulos
 - 🔴 NÃO IMPLEMENTADO — Entitlements de módulos
-- 🟡 PARCIAL — Documentos (API de metadados: criar, editar, excluir logicamente, responsável, filial, setor, datas e etiquetas — `docs/api/documentos.md`; arquivo, upload e tela pendentes)
-- 🟡 PARCIAL — Categorias (API com árvore de até 3 níveis, nome único entre irmãs e exclusão que recusa categoria em uso; tela pendente)
+- 🟡 PARCIAL — Documentos (API e tela `/documentos`: criar, editar, excluir logicamente, responsável, filial, setor, datas e etiquetas — `docs/api/documentos.md`, `docs/frontend/telas.md`; arquivo e upload pendentes — FASE 5)
+- ✅ CONCLUÍDO — Categorias (API e tela `/categorias`: árvore de até 3 níveis, nome único entre irmãs e exclusão que recusa categoria em uso)
 - 🔴 NÃO IMPLEMENTADO — Upload seguro
 - 🔴 NÃO IMPLEMENTADO — Storage privado (somente contrato `StorageProvider`)
-- 🟡 PARCIAL — Pesquisa (busca sem acento em título, descrição e etiquetas, com filtros, ordenação e paginação na API; tela pendente)
+- ✅ CONCLUÍDO — Pesquisa (busca sem acento em título, descrição e etiquetas, com filtros, ordenação e paginação, na API e na tela de documentos)
 - 🔴 NÃO IMPLEMENTADO — Vencimentos (somente colunas `issue_date`/`expiration_date`)
 - 🔴 NÃO IMPLEMENTADO — Alertas
 - 🔴 NÃO IMPLEMENTADO — Dashboard
@@ -855,7 +855,7 @@ Entidades existentes além da lista: `Membership` (vínculo pessoa ↔ empresa),
 
 ## 10.1 Documentos
 
-> **Status (2026-09-11):** 🟡 PARCIAL — metadados completos pela API (`docs/api/documentos.md`). Arquivo (upload/download) é da FASE 5 e versionamento da FASE 6.
+> **Status (2026-09-11):** 🟡 PARCIAL — metadados completos pela API (`docs/api/documentos.md`) e pela tela `/documentos` (`docs/frontend/telas.md`). Arquivo (upload/download) é da FASE 5 e versionamento da FASE 6.
 
 - [x] Criar — `POST /api/documents` (`documents.create`)
 - [x] Editar — `PATCH /api/documents/[documentId]`
@@ -964,7 +964,7 @@ Entidades existentes além da lista: `Membership` (vínculo pessoa ↔ empresa),
 
 # 11. DASHBOARD E UX
 
-> **Status (2026-09-11):** 🔴 NÃO IMPLEMENTADO — existe apenas a página inicial da fundação (identidade do produto). Design system, dashboard, Builder e área de expansão ainda não existem.
+> **Status (2026-09-11):** 🟡 PARCIAL — existem a página inicial, as telas de acesso, o Builder e as telas de documentos e categorias, com a paleta oficial e cabeçalho comum (DEC-029, `docs/frontend/telas.md`). Dashboard executivo e área de expansão ainda não existem; o design system continua limitado aos componentes base.
 
 ## 11.1 Dashboard executivo
 
@@ -1378,21 +1378,23 @@ As recomendações devem ser:
 
 ## FASE 4 — Núcleo documental
 
-**Status da fase:** 🟡 PARCIAL. A API de metadados está pronta (documentos, categorias, etiquetas, busca e filtros); faltam situação de vencimento com alertas, dashboard e as telas.
+**Status da fase:** 🟡 PARCIAL. Metadados, categorias, etiquetas, busca e filtros estão prontos na API e nas telas; faltam situação de vencimento com alertas e o dashboard.
 
 - ✅ CONCLUÍDO — Documentos (metadados pela API)
   - Evidência: `GET/POST /api/documents` e `GET/PATCH/DELETE /api/documents/[documentId]` com `documents.read/create/update/delete`; `src/application/documents/manage-documents.ts`; `docs/api/documentos.md`; auditoria `document.created/updated/deleted`.
   - Testes: `tests/unit/application/documents/manage-documents.test.ts`, `tests/integration/documents/documents.test.ts` e `tests/e2e/documents.spec.ts` — passaram (local, 2026-09-11).
-  - Pendente: o arquivo em si (FASE 5) e a tela.
+  - Tela: `/documentos` — lista com busca, filtros, ordenação e paginação; criar, editar e excluir em formulário; `tests/e2e/documents-ui.spec.ts` — passou.
+  - Pendente: o arquivo em si (FASE 5).
 - ✅ CONCLUÍDO — Categorias (árvore de até 3 níveis)
   - Evidência: `GET/POST /api/categories` e `GET/PATCH/DELETE /api/categories/[categoryId]` (`categories.read`/`categories.manage`); nome único entre irmãs, sem ciclo, exclusão lógica que recusa categoria em uso; caminho completo em cada resposta (DEC-032).
+  - Tela: `/categorias` — árvore com recuo por nível, contagem de documentos e formulário de categoria superior.
 - ✅ CONCLUÍDO — Tags
   - Evidência: tabelas `tags` e `document_tags`; etiqueta é da empresa e não duplica por acento ou maiúscula; `GET /api/tags` lista as em uso com a contagem de documentos vivos (DEC-032).
 - ✅ CONCLUÍDO — Responsáveis
   - Evidência: `responsibleUserId` precisa ser membro ativo; só é reconferido quando muda, para suspensão posterior não travar a edição do documento.
 - 🟡 PARCIAL — Pesquisa
   - Evidência: busca sem acento por título, descrição e etiquetas (coluna `documents.search_text`, DEC-031), com filtros por categoria (incluindo subcategorias), etiqueta, responsável, filial e setor, ordenação e paginação.
-  - Pendente: tela e índice de texto quando o volume justificar.
+  - Tela: busca e filtros na lista de documentos, com paginação e resumo ("1-20 de 37").
 - 🔴 NÃO IMPLEMENTADO — Vencimentos (situação automática e renovação; as datas já existem e são validadas)
 - 🔴 NÃO IMPLEMENTADO — Alertas
 - 🔴 NÃO IMPLEMENTADO — Dashboard
@@ -1837,7 +1839,7 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 **Produto:** ✅ CONCLUÍDO (definição e identidade visual; vetores da logo pendentes)
 **Arquitetura:** ✅ CONCLUÍDO (monólito modular em camadas; entitlements por empresa na cadeia de autorização)
 **Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit, CSRF, empresa ativa, RBAC, MFA para OWNER/ADMIN, CSP com nonce, HSTS e logs estruturados; verificação de e-mail e recuperação de senha no backlog)
-**Frontend:** 🟡 PARCIAL (Tailwind CSS; telas de cadastro, login, segundo fator, Builder e convite; sem dashboard nem telas de documentos)
+**Frontend:** 🟡 PARCIAL (Tailwind CSS com a paleta oficial; telas de cadastro, login, segundo fator, Builder, convite, documentos e categorias, com cabeçalho e navegação comuns; sem dashboard)
 **Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial, entitlements por empresa, API do Builder com início do trial e troca de módulos durante o trial, gestão de membros com convites; núcleo documental com categorias, etiquetas, busca e filtros — sem arquivo e sem os demais módulos de negócio)
 **Banco:** 🟡 PARCIAL (identidade, empresa, acesso, documentos com texto de busca e etiquetas, auditoria, catálogo comercial com preços e kits, módulos por empresa e assinatura com prazos de retenção)
 **Storage:** 🔴 NÃO IMPLEMENTADO
@@ -2437,3 +2439,36 @@ Verificação em produção: após o merge e o deploy. A migração só acrescen
 - O arquivo do documento (upload, download e antivírus) é a FASE 5 e vai precisar de um serviço externo de armazenamento — peço autorização antes.
 - Situação automática de vencimento, alertas e dashboard são a etapa seguinte da FASE 4.
 - A busca hoje varre os documentos da empresa; o índice de texto entra quando o volume justificar (DEC-031).
+
+---
+
+## 2026-09-11 — FASE 4: telas de documentos e categorias
+
+### O que foi feito
+
+| Item | Evidência |
+|---|---|
+| Tela de documentos | `/documentos`: lista com busca, filtros (categoria, etiqueta, responsável), ordenação, paginação e resumo; formulário para criar e editar; exclusão com confirmação na própria linha |
+| Tela de categorias | `/categorias`: árvore com recuo por nível, descrição e contagem de documentos; formulário com categoria superior; recusa de exclusão explicada |
+| Navegação | cabeçalho comum `AppShell` (marca, empresa, Documentos/Categorias/Assinatura, pessoa e Sair), com a seção atual em `aria-current`; o Builder passou a usá-lo |
+| Paleta | azul da marca nos botões e na seção ativa; categoria do documento em azul escuro no tema claro e ciano no escuro, como manda a regra de acessibilidade da identidade visual |
+| Permissões na tela | botões e campos aparecem conforme `context.permissions` (sem `documents.create` não há "Novo documento"; sem `members.read` não há campo Responsável) — a API continua conferindo tudo |
+| Datas | `formatCalendarDate` exibe a data em UTC: `2026-02-01` aparece como 01/02/2026, e não 31/01 |
+| Verificação visual | capturas das telas nos temas claro e escuro conferidas durante a implementação |
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm lint` / `tsc --noEmit` | ✅ sem erros |
+| `pnpm test` | ✅ 34 arquivos, 421 testes (novos: etiquetas do formulário, consulta da listagem, resumo da página e datas de calendário) |
+| `pnpm test:integration` | ✅ 13 arquivos, 161 testes |
+| `pnpm test:e2e` | ✅ 45 testes (novos, no navegador: categoria e subcategoria, documento com etiquetas e validade, busca sem acento, edição, exclusão, recusas explicadas e navegação entre as seções) |
+| `pnpm build` | ✅ |
+
+Verificação em produção: após o merge e o deploy. Sem migração.
+
+### Observações
+
+- Dois ajustes durante a implementação: `api-client` passou a aceitar `PATCH`, e os testes precisaram escopar os rótulos repetidos entre filtro e formulário ("Categoria", "Responsável").
+- Próxima etapa: situação automática de vencimento, alertas e dashboard.
