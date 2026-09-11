@@ -28,7 +28,9 @@ Fonte da verdade: [`prisma/schema.prisma`](../../prisma/schema.prisma) e [`prism
 | `role_permissions` | via `roles` | junção perfil ↔ permissão |
 | `user_roles` | tenant | perfil de um **membro**: FK `(company_id, user_id)` → `memberships` |
 | `document_categories` | tenant | hierarquia (subcategoria) dentro do mesmo tenant |
-| `documents` | tenant | metadados; categoria, filial, setor do mesmo tenant; responsável e criador precisam ser membros |
+| `documents` | tenant | metadados; categoria, filial, setor do mesmo tenant; responsável e criador precisam ser membros; `search_text` guarda título, descrição e etiquetas sem acento para a busca (DEC-031) |
+| `tags` | tenant | etiqueta livre da empresa; `normalized_name` único por empresa evita duplicar por acento ou maiúscula (DEC-032) |
+| `document_tags` | tenant | junção documento ↔ etiqueta, com FKs compostas: os dois são sempre da mesma empresa |
 | `audit_logs` | tenant (opcional) | append-only; sem empresa para eventos como login; com empresa, o autor precisa ser membro |
 | `sessions` | pessoa | `id` = SHA-256 do token; empresa ativa precisa ser vínculo da pessoa; expiração por inatividade e absoluta |
 | `rate_limit_buckets` | sistema | janela fixa por chave; chaves sem dado pessoal em claro |
@@ -85,6 +87,9 @@ Isso é **defesa em profundidade** — a autorização server-side por tenant co
 | Os 6 kits, sua composição e preços | `INSERT` em `kits`, `kit_modules` e `kit_prices` | `kits_and_subscription_retention` |
 | Permissões `billing.read`/`billing.manage` para OWNER e ADMIN das empresas existentes | `INSERT` em `permissions` e `INSERT … SELECT` em `role_permissions` | `builder_trial_and_billing_permissions` |
 | E-mail do convite em minúsculas, token só como SHA-256 hexadecimal, convite não pode ser aceito e revogado ao mesmo tempo | `company_invitations_email_lowercase_chk`, `company_invitations_token_hash_format_chk`, `company_invitations_accepted_or_revoked_chk` | `members_invitations` |
+| Título não vazio e validade nunca antes da emissão | `documents_title_not_blank_chk`, `documents_dates_order_chk` | `documents_categories_tags` |
+| Categoria com nome não vazio e que não é filha de si mesma | `document_categories_name_not_blank_chk`, `document_categories_not_own_parent_chk` | `documents_categories_tags` |
+| Etiqueta com nome não vazio e nome normalizado em minúsculas, sem espaços nas pontas | `tags_name_not_blank_chk`, `tags_normalized_name_format_chk` | `documents_categories_tags` |
 
 ## Migrações
 
@@ -98,6 +103,7 @@ Isso é **defesa em profundidade** — a autorização server-side por tenant co
 | `20260911051529_kits_and_subscription_retention` | `kits`, `kit_modules` e `kit_prices` com os 6 kits; coluna `subscriptions.suspended_at` para a retenção |
 | `20260911054436_builder_trial_and_billing_permissions` | coluna `subscriptions.kit_key` (FK para `kits`) e permissões de assinatura para OWNER e ADMIN já existentes |
 | `20260911061303_members_invitations` | status `REMOVED` em `MembershipStatus` e tabela `company_invitations` |
+| `20260911173626_documents_categories_tags` | coluna `documents.search_text` (padrão `''`), tabelas `tags` e `document_tags` e os CHECKs do núcleo documental |
 
 A preservação de dados da migração `identity_memberships_sessions` foi verificada em 2026-09-11 num banco descartável: migração 1 → dados no formato antigo (pessoas INVITED/ACTIVE/DISABLED, perfil, documento com responsável e criador, auditoria) → migração 2 → vínculos e status corretos, nenhum registro perdido.
 
@@ -114,4 +120,5 @@ Fluxo:
 - Rotação das chaves `APP_ENCRYPTION_KEY` (formato cifrado já é versionado: `v1.`) e `APP_HMAC_KEY`.
 - Limpeza periódica de `sessions` expiradas e `rate_limit_buckets` vencidos (job).
 - Row-Level Security (RLS) do PostgreSQL como camada adicional de isolamento.
+- Índice de texto para a busca documental (trigrama ou `tsvector` sobre `documents.search_text`), quando o volume justificar (DEC-031).
 - Exclusão de contas após o prazo de retenção (DEC-025): irreversível, depende de autorização explícita; o prazo legal de 1 ano após o cancelamento deve ser confirmado com o jurídico.
