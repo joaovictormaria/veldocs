@@ -54,6 +54,8 @@ export interface DocumentsData {
   readonly can: { readonly create: boolean; readonly update: boolean; readonly remove: boolean };
   /** Empresa tem o módulo Controle de vencimentos: situação e filtro aparecem. */
   readonly expirations: boolean;
+  /** Filtros vindos da URL (links do painel), já conferidos pela página. */
+  readonly initialFilters: { readonly status: string; readonly categoryId: string };
 }
 
 const SELECT_CLASS =
@@ -75,7 +77,7 @@ export function DocumentsClient({ data }: { readonly data: DocumentsData | null 
 }
 
 function DocumentsBrowser({ data }: { readonly data: DocumentsData }) {
-  const [filters, setFilters] = useState<DocumentFilters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<DocumentFilters>(() => ({ ...EMPTY_FILTERS, ...data.initialFilters }));
   const [listing, setListing] = useState(data.listing);
   const [tags, setTags] = useState(data.tags);
   const [loading, setLoading] = useState(false);

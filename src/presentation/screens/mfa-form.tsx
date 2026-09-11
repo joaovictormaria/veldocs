@@ -19,8 +19,9 @@ export function MfaForm({ mode: initialMode }: { readonly mode: "enroll" | "veri
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const continueToBuilder = () => {
-    router.push("/builder");
+  // `/inicio` decide: Builder na primeira configuração da empresa, painel depois.
+  const continueToStart = () => {
+    router.push("/inicio");
     router.refresh();
   };
 
@@ -70,7 +71,7 @@ export function MfaForm({ mode: initialMode }: { readonly mode: "enroll" | "veri
       setError(errorMessage(result.error, "Código inválido ou já utilizado."));
       return;
     }
-    continueToBuilder();
+    continueToStart();
   };
 
   if (recoveryCodes) {
@@ -86,7 +87,7 @@ export function MfaForm({ mode: initialMode }: { readonly mode: "enroll" | "veri
             </li>
           ))}
         </ul>
-        <Button className="mt-6 w-full" onClick={continueToBuilder}>
+        <Button className="mt-6 w-full" onClick={continueToStart}>
           Guardei meus códigos, continuar
         </Button>
       </AuthCard>

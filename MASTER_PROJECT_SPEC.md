@@ -376,7 +376,7 @@ O objetivo é **mostrar valor**, e não pressionar o usuário.
 - ✅ CONCLUÍDO — Pesquisa (busca sem acento em título, descrição e etiquetas, com filtros, ordenação e paginação, na API e na tela de documentos)
 - ✅ CONCLUÍDO — Vencimentos (módulo Controle de vencimentos: situação automática, filtro por situação e renovação, na API e nas telas — DEC-033)
 - 🟡 PARCIAL — Alertas (painel `/vencimentos` com vencidos e a vencer em 30 dias; aviso ativo por e-mail ou WhatsApp pendente)
-- 🔴 NÃO IMPLEMENTADO — Dashboard
+- 🟡 PARCIAL — Dashboard (`/painel`: cadastro documental, documentos por categoria, vencimentos com o módulo e atividade recente — `docs/api/painel.md`; score documental e radar de risco são módulos futuros)
 - 🟡 PARCIAL — Auditoria/histórico (`audit_logs` append-only; eventos de cadastro, login e logout)
 - 🔴 NÃO IMPLEMENTADO — Versionamento
 - ✅ CONCLUÍDO — Builder de módulos (API e tela: catálogo, preço em tempo real, sugestão de kit, início do trial e troca de kit e módulos durante o trial — `docs/api/builder.md`, `docs/frontend/telas.md`)
@@ -964,17 +964,17 @@ Entidades existentes além da lista: `Membership` (vínculo pessoa ↔ empresa),
 
 # 11. DASHBOARD E UX
 
-> **Status (2026-09-11):** 🟡 PARCIAL — existem a página inicial, as telas de acesso, o Builder e as telas de documentos e categorias, com a paleta oficial e cabeçalho comum (DEC-029, `docs/frontend/telas.md`). Dashboard executivo e área de expansão ainda não existem; o design system continua limitado aos componentes base.
+> **Status (2026-09-11):** 🟡 PARCIAL — existem a página inicial, as telas de acesso, o Builder, o painel e as telas de documentos, vencimentos e categorias, com a paleta oficial e cabeçalho comum (DEC-029, DEC-034, `docs/frontend/telas.md`). Área de expansão ainda não existe; o design system continua limitado aos componentes base.
 
 ## 11.1 Dashboard executivo
 
-- [ ] Total de documentos
+- [x] Total de documentos — com os novos dos últimos 30 dias e o cadastro incompleto (sem responsável, validade ou categoria)
 - [x] Válidos — contador do painel de vencimentos (módulo Controle de vencimentos)
 - [x] Vencendo — idem
 - [x] Vencidos — idem
 - [ ] Pendentes
 - [x] Próximos vencimentos — lista "Precisam de atenção" do painel
-- [ ] Atividade recente
+- [x] Atividade recente — ações sobre os dados da empresa, para quem tem `audit.read` (DEC-034)
 - [ ] Score documental
 - [ ] Radar de risco
 
@@ -1378,7 +1378,7 @@ As recomendações devem ser:
 
 ## FASE 4 — Núcleo documental
 
-**Status da fase:** 🟡 PARCIAL. Metadados, categorias, etiquetas, busca, filtros e o controle de vencimentos estão prontos na API e nas telas; faltam o aviso ativo de vencimento e o dashboard.
+**Status da fase:** 🟡 PARCIAL. Metadados, categorias, etiquetas, busca, filtros, o controle de vencimentos e o painel estão prontos na API e nas telas; falta o aviso ativo de vencimento, que depende de um canal de envio (e-mail no backlog, WhatsApp na FASE 15).
 
 - ✅ CONCLUÍDO — Documentos (metadados pela API)
   - Evidência: `GET/POST /api/documents` e `GET/PATCH/DELETE /api/documents/[documentId]` com `documents.read/create/update/delete`; `src/application/documents/manage-documents.ts`; `docs/api/documentos.md`; auditoria `document.created/updated/deleted`.
@@ -1402,7 +1402,11 @@ As recomendações devem ser:
 - 🟡 PARCIAL — Alertas
   - Evidência: painel com vencidos e a vencer na janela de 30 dias (ajustável por `days`), do mais urgente para o menos.
   - Pendente: aviso ativo por e-mail ou WhatsApp — o e-mail transacional está no backlog e o WhatsApp é a FASE 15.
-- 🔴 NÃO IMPLEMENTADO — Dashboard
+- ✅ CONCLUÍDO — Dashboard
+  - Evidência: `GET /api/dashboard` (`documents.read`) e tela `/painel`: cadastro documental com o que está incompleto, documentos por categoria em barras, vencimentos com o módulo e atividade recente com `audit.read`; `src/application/dashboard/dashboard-queries.ts`; `docs/api/painel.md` (DEC-034).
+  - Entrada: `/inicio` leva ao Builder só enquanto a empresa não escolheu os módulos e a pessoa pode escolher; nos demais casos, ao painel.
+  - Testes: `tests/unit/application/dashboard/dashboard-queries.test.ts`, `tests/integration/dashboard/dashboard.test.ts` e `tests/e2e/dashboard.spec.ts` — passaram (local, 2026-09-11).
+  - Fora desta fase: score documental e radar de risco (módulos pagos da FASE 14).
 
 ## FASE 5 — Storage e upload seguro
 
@@ -1857,13 +1861,33 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 ---
 
+## DEC-034 — Painel como entrada do sistema
+
+**Status:** ✅ CONCLUÍDO (implementado na FASE 4, a pedido do usuário)
+
+**Decisão:** depois de entrar, a pessoa vai para o **painel** (`/painel`). O Builder só é a entrada enquanto a empresa ainda não escolheu os módulos **e** a pessoa pode escolhê-los (`billing.manage`); segundo fator pendente continua indo para `/seguranca`. A regra fica num lugar só, `/inicio`, e login, segundo fator, cadastro e convite passam por ela.
+
+**Motivo:** a Assinatura é uma tela de configuração, visitada de vez em quando; abrir sempre nela obrigava a pessoa a procurar a saída. Um Colaborador convidado caía numa tela que não podia usar ("Somente Proprietário ou Administrador…").
+
+**O que o painel mostra, e para quem:** cada parte obedece à regra que já vale nas outras telas, então o painel não revela nada novo a nenhum perfil:
+
+- cadastro documental (total, novos em 30 dias, sem responsável, sem validade, sem categoria) e documentos por categoria — `documents.read`;
+- vencimentos (contadores e próximos) — só com o módulo Controle de vencimentos; sem ele, se houver documentos com validade, uma sugestão discreta do módulo (MASTER SPEC 2.10);
+- atividade recente — só com `audit.read`, e só ações sobre os dados da empresa: login, segundo fator e sessão ficam de fora, porque dizem respeito a cada pessoa.
+
+**Gráfico:** barras horizontais de uma série só, na cor principal da marca (validada contra as superfícies clara e escura), sem legenda, com o valor na ponta em tinta de texto; categorias além das 6 maiores somam em "Outras categorias". Cada número e cada barra levam à lista de documentos já filtrada.
+
+**Evidência:** `src/app/inicio/page.tsx`, `src/app/_lib/session.ts` (`landingPath`), `src/application/dashboard/dashboard-queries.ts`, `src/presentation/screens/dashboard-view.tsx`; `tests/e2e/dashboard.spec.ts` (empresa nova vai ao Builder e, depois do trial, ao painel; números levam à lista filtrada; sugestão do módulo) e `tests/e2e/builder-ui.spec.ts` (colaborador convidado começa pelo painel) — passaram.
+
+---
+
 # 24. STATUS GERAL
 
 **Produto:** ✅ CONCLUÍDO (definição e identidade visual; vetores da logo pendentes)
 **Arquitetura:** ✅ CONCLUÍDO (monólito modular em camadas; entitlements por empresa na cadeia de autorização)
 **Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit, CSRF, empresa ativa, RBAC, MFA para OWNER/ADMIN, CSP com nonce, HSTS e logs estruturados; verificação de e-mail e recuperação de senha no backlog)
-**Frontend:** 🟡 PARCIAL (Tailwind CSS com a paleta oficial; telas de cadastro, login, segundo fator, Builder, convite, documentos, categorias e vencimentos, com cabeçalho e navegação comuns; sem dashboard)
-**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial, entitlements por empresa, API do Builder com início do trial e troca de módulos durante o trial, gestão de membros com convites; núcleo documental com categorias, etiquetas, busca e filtros; módulo Controle de vencimentos — sem arquivo e sem os demais módulos de negócio)
+**Frontend:** 🟡 PARCIAL (Tailwind CSS com a paleta oficial; telas de cadastro, login, segundo fator, Builder, convite, painel, documentos, categorias e vencimentos, com cabeçalho e navegação comuns)
+**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial, entitlements por empresa, API do Builder com início do trial e troca de módulos durante o trial, gestão de membros com convites; núcleo documental com categorias, etiquetas, busca e filtros; módulo Controle de vencimentos; painel da empresa — sem arquivo e sem os demais módulos de negócio)
 **Banco:** 🟡 PARCIAL (identidade, empresa, acesso, documentos com texto de busca e etiquetas, auditoria, catálogo comercial com preços e kits, módulos por empresa e assinatura com prazos de retenção)
 **Storage:** 🔴 NÃO IMPLEMENTADO
 **Billing:** 🔴 NÃO IMPLEMENTADO
@@ -2529,3 +2553,32 @@ Verificação em produção: após o merge e o deploy. A migração só insere d
 
 - Conferência visual do painel e da lista nos temas claro e escuro durante a implementação.
 - Aviso ativo de vencimento depende de canal: e-mail transacional (backlog) ou WhatsApp (FASE 15).
+
+---
+
+## 2026-09-11 — FASE 4: painel da empresa e nova entrada
+
+### O que foi feito
+
+| Item | Evidência |
+|---|---|
+| API | `GET /api/dashboard` (`documents.read`): cadastro documental, documentos por categoria, vencimentos com o módulo e atividade recente com `audit.read` |
+| Tela | `/painel`: saudação, indicadores do cadastro (total, novos, sem responsável, sem validade, sem categoria), bloco de vencimentos, gráfico de documentos por categoria e atividade recente |
+| Navegação | "Painel" é a primeira seção do menu, e a logo leva a ele |
+| Entrada | `/inicio` decide: segundo fator pendente → `/seguranca`; empresa sem módulos e pessoa que pode escolher → `/builder`; senão → `/painel`. Login, segundo fator, cadastro e convite passam por ela (DEC-034) |
+| Lista filtrada pela URL | `/documentos?status=…` e `/documentos?categoryId=…` abrem a lista já filtrada; a página confere os valores |
+| Sugestão do módulo | sem o Controle de vencimentos e com documentos com validade, o painel sugere o módulo no lugar do bloco de vencimentos |
+| Gráfico | barras de uma série na cor principal (validada nos dois temas), valor na ponta, "Outras categorias" além das 6 maiores |
+| Documentação | `docs/api/painel.md`, telas e DEC-034 |
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm lint` / `tsc --noEmit` | ✅ sem erros |
+| `pnpm test` | ✅ 38 arquivos, 464 testes (novos: partes do painel por permissão e módulo, janela de 30 dias, ações da atividade, frases e tempo decorrido) |
+| `pnpm test:integration` | ✅ 15 arquivos, 179 testes (novos: cadastro incompleto e excluídos fora das contas, agrupamento com "outras", atividade com nomes e sem eventos de acesso, id de auditoria inválido, isolamento) |
+| `pnpm test:e2e` | ✅ 54 testes (novos: painel pela API; entrada no Builder e depois no painel; números que abrem a lista filtrada; sugestão do módulo; colaborador convidado começa pelo painel) |
+| `pnpm build` | ✅ |
+
+Verificação em produção: após o merge e o deploy. Sem migração.
