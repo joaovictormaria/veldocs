@@ -3,8 +3,10 @@ import type { AuthorizedContext } from "@/application/access/authorize";
 import { createSubscriptionUseCases } from "@/application/billing/subscription-use-cases";
 import type { BillingCatalogRepository, CatalogKit, CatalogModule } from "@/application/ports/billing-catalog";
 import {
+  type ModuleChange,
   type NewTrial,
   type StoredSubscription,
+  SubscriptionNotInTrialError,
   type SubscriptionRepository,
   TrialAlreadyStartedError,
 } from "@/application/ports/subscription-repository";
@@ -59,10 +61,13 @@ const catalog: BillingCatalogRepository = {
   listKits: async () => KITS,
 };
 
-function setup(options: { stored?: StoredSubscription | null; raceOnStart?: boolean } = {}) {
+function setup(
+  options: { stored?: StoredSubscription | null; raceOnStart?: boolean; raceOnChange?: boolean } = {},
+) {
   let stored = options.stored ?? null;
   const active = new Set<string>(["core"]);
   const trials: NewTrial[] = [];
+  const changes: ModuleChange[] = [];
 
   const repository: SubscriptionRepository = {
     async findByCompany(companyId) {
@@ -76,6 +81,7 @@ function setup(options: { stored?: StoredSubscription | null; raceOnStart?: bool
       trials.push(trial);
       for (const key of trial.modules) active.add(key);
       stored = {
+        id: "subscription-1",
         status: "TRIALING",
         kitKey: trial.kitKey,
         trialStartedAt: trial.startedAt,
@@ -86,14 +92,26 @@ function setup(options: { stored?: StoredSubscription | null; raceOnStart?: bool
       };
       return { id: "subscription-1" };
     },
+    async changeModules(change) {
+      if (options.raceOnChange) throw new SubscriptionNotInTrialError();
+      changes.push(change);
+      const wanted = new Set(change.modules);
+      const deactivated = [...active].filter((key) => !wanted.has(key)).sort();
+      const activated = [...wanted].filter((key) => !active.has(key)).sort();
+      for (const key of deactivated) active.delete(key);
+      for (const key of activated) active.add(key);
+      if (stored) stored = { ...stored, kitKey: change.kitKey };
+      return { activated, deactivated };
+    },
   };
 
   const audit = createFakeAudit();
   const useCases = createSubscriptionUseCases({ repository, catalog, audit: audit.audit, now: () => NOW });
-  return { useCases, trials, events: audit.events };
+  return { useCases, trials, changes, events: audit.events };
 }
 
 const subscription = (overrides: Partial<StoredSubscription>): StoredSubscription => ({
+  id: "subscription-1",
   status: "TRIALING",
   kitKey: null,
   trialStartedAt: null,
@@ -105,10 +123,11 @@ const subscription = (overrides: Partial<StoredSubscription>): StoredSubscriptio
 });
 
 describe("situação da assinatura", () => {
-  it("sem assinatura: ainda no Builder, com o Core liberado e valor mensal indefinido", async () => {
+  it("sem assinatura: ainda no Builder, com o Core liberado, sem troca e valor mensal indefinido", async () => {
     await expect(setup().useCases.getSummary(context)).resolves.toEqual({
       status: "NOT_STARTED",
       hasAccess: true,
+      canChangeModules: false,
       trial: null,
       kit: null,
       modules: [{ key: "core", name: "Core" }],
@@ -118,7 +137,7 @@ describe("situação da assinatura", () => {
     });
   });
 
-  it("trial vencido: sem acesso, 0 dias restantes e o valor que será cobrado", async () => {
+  it("trial vencido: sem acesso, sem troca, 0 dias restantes e o valor que será cobrado", async () => {
     const { useCases } = setup({
       stored: subscription({ trialStartedAt: new Date(NOW.getTime() - 15 * DAY), trialEndsAt: new Date(NOW.getTime() - DAY) }),
     });
@@ -126,6 +145,7 @@ describe("situação da assinatura", () => {
     await expect(useCases.getSummary(context)).resolves.toMatchObject({
       status: "TRIAL_EXPIRED",
       hasAccess: false,
+      canChangeModules: false,
       trial: { daysRemaining: 0 },
       monthlyTotalCents: 4990,
     });
@@ -137,6 +157,7 @@ describe("situação da assinatura", () => {
     await expect(useCases.getSummary(context)).resolves.toMatchObject({
       status: "CANCELED",
       hasAccess: false,
+      canChangeModules: false,
       trial: null,
       dataRetentionUntil: new Date(NOW.getTime() + 365 * DAY),
     });
@@ -163,6 +184,7 @@ describe("início do trial", () => {
       subscription: {
         status: "TRIAL_ACTIVE",
         hasAccess: true,
+        canChangeModules: true,
         trial: { startedAt: NOW, daysRemaining: 14 },
         kit: { key: "equipe", name: "Equipe" },
         monthlyTotalCents: 9980,
@@ -241,6 +263,96 @@ describe("início do trial", () => {
     await expect(useCases.startTrial(context, { modules: [] }, request)).resolves.toEqual({
       ok: false,
       reason: "trial_already_started",
+    });
+    expect(events).toEqual([]);
+  });
+});
+
+describe("troca de módulos durante o trial (DEC-030)", () => {
+  it("troca kit e módulos, desativa o que saiu, recalcula o valor e audita", async () => {
+    const { useCases, changes, events } = setup();
+    await useCases.startTrial(context, { kitKey: "equipe", modules: ["contratos"] }, request);
+
+    const result = await useCases.changeModules(context, { modules: ["vencimentos"] }, request);
+
+    expect(changes).toEqual([{ companyId: "company-1", kitKey: null, modules: ["core", "vencimentos"], at: NOW }]);
+    expect(result).toMatchObject({
+      ok: true,
+      subscription: {
+        status: "TRIAL_ACTIVE",
+        kit: null,
+        modules: [
+          { key: "core", name: "Core" },
+          { key: "vencimentos", name: "Controle de vencimentos" },
+        ],
+        monthlyTotalCents: 6980,
+        trial: { daysRemaining: 14 },
+      },
+    });
+    expect(events.at(-1)).toEqual(
+      expect.objectContaining({
+        action: "subscription.modules_changed",
+        entityId: "subscription-1",
+        metadata: {
+          kitKey: null,
+          previousKitKey: "equipe",
+          activated: "",
+          deactivated: "contratos,funcionarios",
+          monthlyTotalCents: 6980,
+        },
+      }),
+    );
+  });
+
+  it("sem mudança real, responde normalmente e não audita", async () => {
+    const { useCases, events } = setup();
+    await useCases.startTrial(context, { kitKey: "equipe", modules: ["contratos"] }, request);
+
+    const result = await useCases.changeModules(context, { kitKey: "equipe", modules: ["contratos"] }, request);
+
+    expect(result).toMatchObject({ ok: true, subscription: { monthlyTotalCents: 9980 } });
+    expect(events.map((event) => event.action)).toEqual(["subscription.trial_started"]);
+  });
+
+  it("antes de iniciar o trial não há o que trocar", async () => {
+    const { useCases, changes } = setup();
+    await expect(useCases.changeModules(context, { modules: ["vencimentos"] }, request)).resolves.toEqual({
+      ok: false,
+      reason: "trial_not_started",
+    });
+    expect(changes).toEqual([]);
+  });
+
+  it.each([
+    ["trial vencido", subscription({ trialEndsAt: new Date(NOW.getTime() - DAY) })],
+    ["assinatura ativa", subscription({ status: "ACTIVE" })],
+    ["assinatura cancelada", subscription({ status: "CANCELED", canceledAt: NOW })],
+  ])("fora do teste grátis vigente (%s) a troca é recusada", async (_label, stored) => {
+    const { useCases, changes } = setup({ stored });
+    await expect(useCases.changeModules(context, { modules: ["vencimentos"] }, request)).resolves.toEqual({
+      ok: false,
+      reason: "not_in_trial",
+    });
+    expect(changes).toEqual([]);
+  });
+
+  it("escolha inválida não altera nada", async () => {
+    const { useCases, changes } = setup({ stored: subscription({ trialEndsAt: new Date(NOW.getTime() + 5 * DAY) }) });
+    await expect(useCases.changeModules(context, { modules: ["modulo-x"] }, request)).resolves.toMatchObject({
+      ok: false,
+      reason: "invalid_input",
+    });
+    expect(changes).toEqual([]);
+  });
+
+  it("o trial venceu entre a leitura e a gravação: recusa sem auditar", async () => {
+    const { useCases, events } = setup({
+      stored: subscription({ trialEndsAt: new Date(NOW.getTime() + 5 * DAY) }),
+      raceOnChange: true,
+    });
+    await expect(useCases.changeModules(context, { modules: ["vencimentos"] }, request)).resolves.toEqual({
+      ok: false,
+      reason: "not_in_trial",
     });
     expect(events).toEqual([]);
   });

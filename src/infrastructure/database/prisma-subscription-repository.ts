@@ -1,4 +1,8 @@
-import { type SubscriptionRepository, TrialAlreadyStartedError } from "@/application/ports/subscription-repository";
+import {
+  SubscriptionNotInTrialError,
+  type SubscriptionRepository,
+  TrialAlreadyStartedError,
+} from "@/application/ports/subscription-repository";
 import type { PrismaClient } from "@/generated/prisma/client";
 
 const isUniqueViolation = (error: unknown): boolean =>
@@ -10,6 +14,7 @@ export function createPrismaSubscriptionRepository(prisma: PrismaClient): Subscr
       return prisma.subscription.findUnique({
         where: { companyId },
         select: {
+          id: true,
           status: true,
           kitKey: true,
           trialStartedAt: true,
@@ -66,6 +71,55 @@ export function createPrismaSubscriptionRepository(prisma: PrismaClient): Subscr
         if (isUniqueViolation(error)) throw new TrialAlreadyStartedError();
         throw error;
       }
+    },
+
+    /**
+     * Uma transação que confere de novo, no momento da gravação, se o trial
+     * ainda vale. Módulo que sai vira INACTIVE com a data; nada é apagado, e
+     * voltar a escolhê-lo reativa a mesma linha.
+     */
+    changeModules(change) {
+      return prisma.$transaction(async (tx) => {
+        const current = await tx.subscription.findUnique({
+          where: { companyId: change.companyId },
+          select: { status: true, trialEndsAt: true },
+        });
+        if (
+          current?.status !== "TRIALING" ||
+          !current.trialEndsAt ||
+          current.trialEndsAt.getTime() <= change.at.getTime()
+        ) {
+          throw new SubscriptionNotInTrialError();
+        }
+
+        await tx.subscription.update({ where: { companyId: change.companyId }, data: { kitKey: change.kitKey } });
+
+        const activeRows = await tx.companyModule.findMany({
+          where: { companyId: change.companyId, status: "ACTIVE" },
+          select: { moduleKey: true },
+        });
+        const activeBefore = new Set(activeRows.map((row) => row.moduleKey));
+        const wanted = new Set(change.modules);
+
+        const deactivated = [...activeBefore].filter((key) => !wanted.has(key)).sort();
+        const activated = [...wanted].filter((key) => !activeBefore.has(key)).sort();
+
+        if (deactivated.length > 0) {
+          await tx.companyModule.updateMany({
+            where: { companyId: change.companyId, moduleKey: { in: deactivated } },
+            data: { status: "INACTIVE", deactivatedAt: change.at },
+          });
+        }
+        for (const moduleKey of activated) {
+          await tx.companyModule.upsert({
+            where: { companyId_moduleKey: { companyId: change.companyId, moduleKey } },
+            create: { companyId: change.companyId, moduleKey, status: "ACTIVE", activatedAt: change.at },
+            update: { status: "ACTIVE", activatedAt: change.at, deactivatedAt: null },
+          });
+        }
+
+        return { activated, deactivated };
+      });
     },
   };
 }

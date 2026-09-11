@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canChangeModules,
   canTransition,
   DATA_RETENTION_DAYS,
   dataRetentionUntil,
@@ -55,6 +56,14 @@ describe("trial de 14 dias", () => {
     expect(trialDaysRemaining(end, at(14))).toBe(0);
     expect(trialDaysRemaining(end, at(30))).toBe(0);
     expect(trialDaysRemaining(null, at(0))).toBeNull();
+  });
+
+  it("só permite trocar módulos pelo Builder com o teste grátis vigente (DEC-030)", () => {
+    const allowed = EFFECTIVE_STATUSES.filter((status) => canChangeModules(status));
+
+    expect(allowed).toEqual(["TRIAL_ACTIVE", "TRIAL_EXPIRING"]);
+    expect(canChangeModules(effectiveStatus(trialing(trialEndFrom(start)), at(13.99)))).toBe(true);
+    expect(canChangeModules(effectiveStatus(trialing(trialEndFrom(start)), at(14)))).toBe(false);
   });
 });
 

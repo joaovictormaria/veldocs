@@ -276,7 +276,7 @@ Documentos + Vencimentos + Alertas
 
 Os kits são uma camada comercial opcional sobre os módulos individuais.
 
-**Kits definidos pelo usuário em 2026-09-11** — 🟡 PARCIAL (catálogo, preços, orçamento, sugestão e contratação no início do trial pela API do Builder; tela e troca durante o trial pendentes):
+**Kits definidos pelo usuário em 2026-09-11** — ✅ CONCLUÍDO na FASE 3 (catálogo, preços, orçamento, sugestão, escolha no início do trial e troca durante o trial, pela API e pela tela do Builder; troca em assinatura paga depende do pagamento — FASE 16, DEC-030):
 
 | Kit | Indicado para | Módulos incluídos | Preço | Soma avulsa | Economia |
 |---|---|---|---|---|---|
@@ -318,6 +318,8 @@ Durante o trial:
 - o sistema deve mostrar o valor que será cobrado após o trial;
 - mudanças de módulos devem refletir no preço futuro;
 - o cliente pode experimentar recursos adicionais conforme as regras comerciais.
+
+**Status (2026-09-11):** 🟡 PARCIAL — estado próprio no backend (DEC-022); dias restantes e valor após o trial no resumo do Builder; troca de kit e módulos durante o trial refletindo no preço futuro (`PUT /api/subscription/modules`, DEC-030). Cobrança ao fim do trial pendente (FASE 16).
 
 ## 2.9 Expiração do trial
 
@@ -377,8 +379,8 @@ O objetivo é **mostrar valor**, e não pressionar o usuário.
 - 🔴 NÃO IMPLEMENTADO — Dashboard
 - 🟡 PARCIAL — Auditoria/histórico (`audit_logs` append-only; eventos de cadastro, login e logout)
 - 🔴 NÃO IMPLEMENTADO — Versionamento
-- 🟡 PARCIAL — Builder de módulos (API e tela: catálogo, preço em tempo real, sugestão de kit e início do trial — `docs/api/builder.md`, `docs/frontend/telas.md`; troca de módulos durante o trial pendente)
-- 🟡 PARCIAL — Trial de 14 dias (início pela API do Builder e estados derivados do tempo; cobrança ao fim do trial pendente — FASE 16)
+- ✅ CONCLUÍDO — Builder de módulos (API e tela: catálogo, preço em tempo real, sugestão de kit, início do trial e troca de kit e módulos durante o trial — `docs/api/builder.md`, `docs/frontend/telas.md`)
+- 🟡 PARCIAL — Trial de 14 dias (início e troca de módulos pelo Builder, estados derivados do tempo; cobrança ao fim do trial pendente — FASE 16)
 - 🟡 PARCIAL — Estados de assinatura/trial (estados da seção 2.8, bloqueio sem assinatura válida e retenção — DEC-022 e DEC-025; transições por cobrança pendentes)
 
 ## 3.2 Evolução V2
@@ -1151,9 +1153,9 @@ Registrar, quando aplicável:
 > Suíte atual: 17 testes Playwright — passaram (local; CI roda contra `pnpm start`).
 
 - ✅ CONCLUÍDO — Cadastro (`tests/e2e/auth.spec.ts`: cookie HttpOnly/SameSite, sessão, login por CPF, logout, credenciais inválidas, origem e JSON obrigatórios)
-- 🟡 PARCIAL — Builder (`tests/e2e/builder.spec.ts` pela API e `tests/e2e/builder-ui.spec.ts` no navegador: cadastro → segundo fator → kit + módulo → trial, sugestão de kit, login com código de recuperação, convite pela tela, telas protegidas; troca de módulos pendente)
-- 🔴 NÃO IMPLEMENTADO — Ativação de módulo
-- 🔴 NÃO IMPLEMENTADO — Desativação
+- ✅ CONCLUÍDO — Builder (`tests/e2e/builder.spec.ts` pela API e `tests/e2e/builder-ui.spec.ts` no navegador: cadastro → segundo fator → kit + módulo → trial, sugestão de kit, login com código de recuperação, convite pela tela, telas protegidas; `tests/e2e/module-change.spec.ts`: troca de kit e módulos durante o trial pela API e pela tela)
+- 🟡 PARCIAL — Ativação de módulo (no início do trial e na troca durante o trial — `tests/e2e/builder.spec.ts`, `tests/e2e/module-change.spec.ts`; ativação após pagamento na FASE 16)
+- 🟡 PARCIAL — Desativação (módulo que sai na troca durante o trial fica inativo, sem apagar dados — `tests/e2e/module-change.spec.ts`; o bloqueio do módulo desativado é verificado na integração, porque nenhum módulo pago tem permissões ainda)
 - 🔴 NÃO IMPLEMENTADO — Trial
 - 🔴 NÃO IMPLEMENTADO — Expiração
 - 🔴 NÃO IMPLEMENTADO — Assinatura
@@ -1175,7 +1177,7 @@ Registrar, quando aplicável:
 
 # 17. MODELO DE ASSINATURA E BILLING
 
-> **Status (2026-09-11):** 🔴 NÃO IMPLEMENTADO — não existem assinatura, trial, catálogo, preços nem entitlements. Entitlements e trial pertencem à FASE 3; billing à FASE 16.
+> **Status (2026-09-11):** 🟡 PARCIAL — assinatura com trial de 14 dias, catálogo com preços e kits, entitlements e troca de módulos durante o trial existem (FASE 3). Checkout, cobrança recorrente, upgrade e downgrade pagos, cancelamento, reativação, inadimplência e webhooks pertencem à FASE 16.
 
 ## 17.1 Billing
 
@@ -1208,7 +1210,7 @@ Permissões funcionais
 
 A desativação de um módulo deve bloquear suas capacidades conforme a política comercial, sem destruir dados automaticamente.
 
-**Status (2026-09-11):** 🟡 PARCIAL — a relação empresa → assinatura → módulos ativos → entitlements existe no banco e na cadeia de autorização (DEC-022); módulo desativado fica bloqueado e assinatura inválida bloqueia a empresa inteira — nos dois casos sem apagar dados. Faltam a ativação/desativação pelo Builder e as permissões funcionais dos módulos pagos.
+**Status (2026-09-11):** 🟡 PARCIAL — a relação empresa → assinatura → módulos ativos → entitlements existe no banco e na cadeia de autorização (DEC-022); módulo desativado fica bloqueado e assinatura inválida bloqueia a empresa inteira — nos dois casos sem apagar dados. A ativação e a desativação pelo Builder existem (início do trial e troca durante o trial — DEC-030). Faltam as permissões funcionais dos módulos pagos.
 
 ---
 
@@ -1328,7 +1330,7 @@ As recomendações devem ser:
 
 ## FASE 3 — Empresa, usuários e módulos comerciais
 
-**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada. Da segunda, já existem o catálogo de módulos, os entitlements por empresa e os estados do trial no backend; faltam a troca de kit e módulos durante o trial, perfis personalizados e a exclusão de contas após a retenção. Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
+**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada. Da segunda, já existem o catálogo de módulos, os entitlements por empresa os estados do trial, o Builder completo (API e tela, com troca de kit e módulos durante o trial) e a gestão de membros com convites; faltam perfis personalizados e a exclusão de contas após a retenção. Observação: o cadastro leva ao segundo fator e ao Builder pelas telas; o catálogo de permissões ainda deverá ser associado aos módulos pagos.
 
 - ✅ CONCLUÍDO — Empresas (entidade, criação no cadastro e edição dos dados cadastrais com CNPJ validado)
   - Evidência: `PATCH /api/company` (`company.update`), `src/application/access/manage-company.ts`, `src/domain/company/cnpj.ts`; auditoria `company.updated`.
@@ -1351,11 +1353,12 @@ As recomendações devem ser:
   - Evidência: `company_modules` por empresa; `src/infrastructure/access/database-entitlements.ts` substitui o provisório "só Core"; o Core é provisionado no cadastro; assinatura inválida bloqueia tudo, Core incluído, sem apagar dados; empresa sem assinatura (antes do Builder) usa o Core; módulo pago exige contratação ativa **e** assinatura válida (DEC-022).
   - Testes: `tests/integration/access/entitlements.test.ts` (trial vigente e vencido, módulo não contratado ou desativado, sem assinatura, PAST_DUE/CANCELED/SUSPENDED, isolamento entre empresas, FK do catálogo, Core no cadastro) — passaram (local, 2026-09-11).
   - Observação: nenhuma permissão pertence ainda a módulo pago — as capacidades desses módulos são de fases futuras, e o bloqueio passa a valer automaticamente quando existirem. Ativar e desativar módulos é parte do Builder.
-- 🟡 PARCIAL — Builder
+- ✅ CONCLUÍDO — Builder
   - Evidência (API): `GET /api/builder/catalog`, `GET /api/builder/quote`, `POST /api/builder/trial` e `GET /api/subscription`, com as permissões `billing.read`/`billing.manage` de OWNER e ADMIN (DEC-026); `src/application/billing/subscription-use-cases.ts`; documentação em `docs/api/builder.md`.
   - Testes: `tests/unit/application/billing/subscription-use-cases.test.ts`, `tests/integration/billing/subscription.test.ts` e `tests/e2e/builder.spec.ts` — passaram (local, 2026-09-11).
   - Tela: `/builder`, com telas de cadastro, login, segundo fator e convite (Tailwind CSS, DEC-029); `tests/e2e/builder-ui.spec.ts` — passou.
-  - Pendente: troca de kit e módulos durante o trial.
+  - Troca de kit e módulos durante o trial: `PUT /api/subscription/modules` (`billing.manage`), só com o teste grátis vigente; módulo que sai fica inativo sem apagar dados e as datas do trial não mudam; auditoria `subscription.modules_changed` (DEC-030). Na tela, "Alterar módulos" no resumo da assinatura.
+  - Testes: `tests/unit/application/billing/subscription-use-cases.test.ts`, `tests/integration/billing/module-change.test.ts` e `tests/e2e/module-change.spec.ts` — passaram (local, 2026-09-11).
 - 🟡 PARCIAL — Preço em tempo real
   - Evidência: preço vigente por data em `src/infrastructure/database/prisma-billing-catalog-repository.ts` e orçamento calculado no backend em `src/domain/billing/pricing.ts` via `createCatalogQueries.quote` — Core sempre incluído, dependências resolvidas, módulo sem preço vigente explícito em vez de valer zero.
   - Testes: `tests/unit/domain/billing/pricing.test.ts` e `tests/integration/billing/module-prices.test.ts` — passaram (local, 2026-09-11).
@@ -1693,7 +1696,7 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 ## DEC-024 — Kits como camada sobre os módulos
 
-**Status:** 🟡 PARCIAL (catálogo, preços, orçamento, sugestão e escolha do kit no início do trial implementados na FASE 3; troca de kit durante o trial pendente)
+**Status:** ✅ CONCLUÍDO (catálogo, preços, orçamento, sugestão, escolha do kit no início do trial e troca durante o trial, implementados na FASE 3; troca em assinatura paga depende do pagamento — FASE 16)
 
 **Decisão (usuário, 2026-09-11):** 6 kits (seção 2.7). Um kit pode ser combinado com módulos avulsos: paga-se o preço do kit e, à parte, só os módulos que ficaram fora dele. O Builder sugere o kit que deixar a mesma seleção mais barata, mesmo que traga módulos a mais; sem economia real, não sugere nada.
 
@@ -1773,13 +1776,27 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 ---
 
+## DEC-030 — Troca de kit e módulos só durante o teste grátis
+
+**Status:** ✅ CONCLUÍDO (implementado na FASE 3)
+
+**Decisão:** a empresa troca kit e módulos pelo Builder enquanto o teste grátis está vigente (`TRIAL_ACTIVE` ou `TRIAL_EXPIRING`). A troca substitui a escolha inteira e não reinicia nem estende o trial: as datas continuam as mesmas. O valor após o trial passa a refletir a nova escolha, com os preços vigentes. Módulo que sai vira `INACTIVE` com a data da desativação — nada é apagado — e escolhê-lo de novo reativa a mesma linha. Antes de iniciar o trial a resposta é `409 trial_not_started`; em qualquer outro estado, `409 not_in_trial`.
+
+**Motivos:** a seção 2.8 exige que mudanças de módulos reflitam no preço futuro. Numa assinatura paga, trocar módulos envolve cobrança proporcional e confirmação de pagamento, que só existem na FASE 16; liberar a troca sem isso deixaria a empresa usar módulos não pagos. Com o trial vencido a empresa está bloqueada (DEC-022) e o caminho é assinar, não trocar. A regra fica no domínio (`canChangeModules` em `src/domain/billing/subscription-status.ts`), e o resumo da assinatura expõe `canChangeModules` para a tela não decidir sozinha.
+
+**Cuidados:** a mesma validação do início do trial (módulo e kit existentes, disponíveis e com preço); a transação confere o trial de novo no momento da gravação, para que um trial vencido entre a leitura e a escrita não seja alterado; a auditoria `subscription.modules_changed` só é gravada quando algo muda, com kit anterior e novo, módulos ativados e desativados e o novo valor.
+
+**Evidência:** `src/application/billing/subscription-use-cases.ts` (`changeModules`), `src/infrastructure/database/prisma-subscription-repository.ts`, `src/app/api/subscription/modules/route.ts`; `tests/unit/domain/billing/subscription-status.test.ts`, `tests/unit/application/billing/subscription-use-cases.test.ts`, `tests/integration/billing/module-change.test.ts` e `tests/e2e/module-change.spec.ts` — passaram.
+
+---
+
 # 24. STATUS GERAL
 
 **Produto:** ✅ CONCLUÍDO (definição e identidade visual; vetores da logo pendentes)
 **Arquitetura:** ✅ CONCLUÍDO (monólito modular em camadas; entitlements por empresa na cadeia de autorização)
 **Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit, CSRF, empresa ativa, RBAC, MFA para OWNER/ADMIN, CSP com nonce, HSTS e logs estruturados; verificação de e-mail e recuperação de senha no backlog)
 **Frontend:** 🟡 PARCIAL (Tailwind CSS; telas de cadastro, login, segundo fator, Builder e convite; sem dashboard nem telas de documentos)
-**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial, entitlements por empresa, API do Builder com início do trial e gestão de membros com convites; sem módulos de negócio)
+**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial, entitlements por empresa, API do Builder com início do trial e troca de módulos durante o trial, gestão de membros com convites; sem módulos de negócio)
 **Banco:** 🟡 PARCIAL (identidade, empresa, acesso, documentos, auditoria, catálogo comercial com preços e kits, módulos por empresa e assinatura com prazos de retenção)
 **Storage:** 🔴 NÃO IMPLEMENTADO
 **Billing:** 🔴 NÃO IMPLEMENTADO
@@ -2307,3 +2324,37 @@ Verificação em produção: após o merge e o deploy.
 
 - Dois ajustes durante a implementação: o carregamento do Builder saiu de um `useEffect` para o servidor (regra `react-hooks/set-state-in-effect` do React 19), e uma expectativa do E2E supunha a barra codificada no redirecionamento (`next=%2Fbuilder`), que o Next.js não codifica.
 - Troca de kit e módulos durante o trial: próxima etapa.
+
+---
+
+## 2026-09-11 — FASE 3: troca de kit e módulos durante o trial
+
+### O que foi feito
+
+| Item | Evidência |
+|---|---|
+| API | `PUT /api/subscription/modules` (`billing.manage`) com `{ kitKey, modules }`: mesma validação do início do trial; só com o teste grátis vigente (`409 trial_not_started` / `409 not_in_trial`) |
+| Banco | numa transação que confere o trial de novo: grava o novo kit, ativa os módulos novos e desativa os que saíram (`INACTIVE` com data, sem apagar); datas do trial inalteradas; sem migração |
+| Entitlements | módulo desativado deixa de valer na hora (`module_not_enabled`) |
+| Tela | "Alterar módulos" no resumo do Builder: kits e módulos marcados com a escolha atual, total em tempo real, "Salvar alterações" e "Cancelar" |
+| Situação | `canChangeModules` no resumo da assinatura |
+| Auditoria | `subscription.modules_changed` com kit anterior e novo, módulos ativados e desativados e o novo valor — só quando algo muda |
+| Decisão | DEC-030 |
+| Documentação | `docs/api/builder.md`, `docs/frontend/telas.md` |
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm lint` / `tsc --noEmit` | ✅ sem erros |
+| `pnpm test` | ✅ 31 arquivos, 381 testes (novos: quando a troca é permitida; troca com e sem kit, sem mudança e sem auditoria, antes do trial, trial vencido, assinatura ativa e cancelada, escolha inválida, trial vencendo durante a gravação) |
+| `pnpm test:integration` | ✅ 12 arquivos, 140 testes (novos: Gestão + Contratos → Comunicação + Vencimentos com R$ 139,80, nada apagado, datas mantidas, auditoria e entitlements; módulo reativado na mesma linha; fora do trial; escolha inválida; conferência na transação) |
+| `pnpm test:e2e` | ✅ 37 testes (novos: troca pela API com as recusas; troca pela tela; cancelar sem alterar) |
+| `pnpm build` | ✅ |
+
+Verificação em produção: após o merge e o deploy. Sem migração.
+
+### Observações
+
+- Troca de módulos em assinatura paga fica para a FASE 16, junto com o pagamento (DEC-030).
+- A sequência pedida — membros e convites, telas com o Builder e troca de módulos durante o trial — está concluída. A FASE 3 segue 🟡 PARCIAL por perfis personalizados e pela exclusão de contas após a retenção.

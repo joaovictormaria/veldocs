@@ -37,6 +37,7 @@ interface Quote {
 export interface Subscription {
   readonly status: string;
   readonly hasAccess: boolean;
+  readonly canChangeModules: boolean;
   readonly trial: { readonly startedAt: string | null; readonly endsAt: string; readonly daysRemaining: number } | null;
   readonly kit: { readonly key: string; readonly name: string } | null;
   readonly modules: ReadonlyArray<{ readonly key: string; readonly name: string }>;
@@ -64,7 +65,7 @@ const STATUS_LABELS: Readonly<Record<string, string>> = {
 
 const CARD = "rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900";
 
-/** Builder (MASTER SPEC 2.4): preços e total vêm sempre do servidor. `data` nulo: perfil sem permissão. */
+/** Builder (MASTER SPEC 2.4 e 2.8): preços e total vêm sempre do servidor. `data` nulo: perfil sem permissão. */
 export function BuilderClient({
   userName,
   companyName,
@@ -75,6 +76,40 @@ export function BuilderClient({
   readonly data: BuilderData | null;
 }) {
   const [subscription, setSubscription] = useState<Subscription | null>(data?.subscription ?? null);
+  const [editing, setEditing] = useState(false);
+
+  const renderContent = () => {
+    if (!data || !subscription) {
+      return <Alert tone="info">Somente Proprietário ou Administrador podem escolher os módulos da empresa.</Alert>;
+    }
+    if (subscription.status === "NOT_STARTED") {
+      return (
+        <ModulePicker mode="start" catalog={data.catalog} initialKitKey={null} initialModules={[]} onDone={setSubscription} />
+      );
+    }
+    if (editing && subscription.canChangeModules) {
+      return (
+        <ModulePicker
+          mode="change"
+          catalog={data.catalog}
+          initialKitKey={subscription.kit?.key ?? null}
+          initialModules={subscription.modules.map((entry) => entry.key)}
+          trialEndsAt={subscription.trial?.endsAt ?? null}
+          onDone={(updated) => {
+            setSubscription(updated);
+            setEditing(false);
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      );
+    }
+    return (
+      <SubscriptionSummary
+        subscription={subscription}
+        onChangeModules={subscription.canChangeModules ? () => setEditing(true) : undefined}
+      />
+    );
+  };
 
   return (
     <div className="min-h-screen">
@@ -91,28 +126,35 @@ export function BuilderClient({
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-10">
-        {!data || !subscription ? (
-          <Alert tone="info">Somente Proprietário ou Administrador podem escolher os módulos da empresa.</Alert>
-        ) : subscription.status === "NOT_STARTED" ? (
-          <ModulePicker catalog={data.catalog} onStarted={setSubscription} />
-        ) : (
-          <SubscriptionSummary subscription={subscription} />
-        )}
-      </main>
+      <main className="mx-auto max-w-6xl px-6 py-10">{renderContent()}</main>
     </div>
   );
 }
 
 function ModulePicker({
+  mode,
   catalog,
-  onStarted,
+  initialKitKey,
+  initialModules,
+  trialEndsAt = null,
+  onDone,
+  onCancel,
 }: {
+  readonly mode: "start" | "change";
   readonly catalog: Catalog;
-  readonly onStarted: (subscription: Subscription) => void;
+  readonly initialKitKey: string | null;
+  /** Módulos já ativos (na troca); Core e módulos do kit ficam de fora da seleção avulsa. */
+  readonly initialModules: readonly string[];
+  readonly trialEndsAt?: string | null;
+  readonly onDone: (subscription: Subscription) => void;
+  readonly onCancel?: () => void;
 }) {
-  const [kitKey, setKitKey] = useState<string | null>(null);
-  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const [kitKey, setKitKey] = useState<string | null>(initialKitKey);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => {
+    const initialKit = new Set(catalog.kits.find((entry) => entry.key === initialKitKey)?.modules ?? []);
+    const core = new Set(catalog.modules.filter((entry) => entry.isCore).map((entry) => entry.key));
+    return new Set(initialModules.filter((key) => !initialKit.has(key) && !core.has(key)));
+  });
   const [quote, setQuote] = useState<Quote | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,20 +196,26 @@ function ModulePicker({
       return next;
     });
 
-  const start = async () => {
+  const submit = async () => {
     setSubmitting(true);
     setError(null);
-    const result = await api<{ subscription: Subscription }>("/api/builder/trial", {
-      method: "POST",
-      body: { kitKey, modules: extras },
-    });
+    const body = { kitKey, modules: extras };
+    const result =
+      mode === "start"
+        ? await api<{ subscription: Subscription }>("/api/builder/trial", { method: "POST", body })
+        : await api<{ subscription: Subscription }>("/api/subscription/modules", { method: "PUT", body });
     setSubmitting(false);
 
     if (!result.ok) {
-      setError(errorMessage(result.error, "Não foi possível iniciar o teste grátis."));
+      setError(
+        errorMessage(
+          result.error,
+          mode === "start" ? "Não foi possível iniciar o teste grátis." : "Não foi possível salvar as alterações.",
+        ),
+      );
       return;
     }
-    onStarted(result.data.subscription);
+    onDone(result.data.subscription);
   };
 
   const suggestion = kitKey ? null : (quote?.suggestion ?? null);
@@ -178,9 +226,13 @@ function ModulePicker({
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="space-y-10">
         <section>
-          <h1 className="text-3xl font-semibold tracking-tight">Monte o VELDOCS da sua empresa</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">
+            {mode === "start" ? "Monte o VELDOCS da sua empresa" : "Alterar módulos do teste grátis"}
+          </h1>
           <p className="mt-2 text-slate-600 dark:text-slate-400">
-            Escolha um kit, módulos avulsos ou os dois. Você testa tudo grátis por {catalog.trialDays} dias.
+            {mode === "start"
+              ? `Escolha um kit, módulos avulsos ou os dois. Você testa tudo grátis por ${catalog.trialDays} dias.`
+              : "Troque o kit ou os módulos quando quiser durante o teste. Módulos que saírem são desativados, sem apagar dados."}
           </p>
         </section>
 
@@ -295,7 +347,9 @@ function ModulePicker({
               <span className="text-base font-normal text-slate-500">/mês</span>
             </p>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-              {catalog.trialDays} dias grátis. Nada é cobrado agora.
+              {mode === "start"
+                ? `${catalog.trialDays} dias grátis. Nada é cobrado agora.`
+                : `O teste continua${trialEndsAt ? ` até ${formatDate(trialEndsAt)}` : ""}. O novo valor vale para depois dele.`}
             </p>
           </div>
 
@@ -317,16 +371,27 @@ function ModulePicker({
             </div>
           ) : null}
 
-          <Button className="mt-6 w-full" loading={submitting} onClick={start}>
-            Começar {catalog.trialDays} dias grátis
+          <Button className="mt-6 w-full" loading={submitting} onClick={submit}>
+            {mode === "start" ? `Começar ${catalog.trialDays} dias grátis` : "Salvar alterações"}
           </Button>
+          {onCancel ? (
+            <Button variant="ghost" className="mt-2 w-full" onClick={onCancel} disabled={submitting}>
+              Cancelar
+            </Button>
+          ) : null}
         </div>
       </aside>
     </div>
   );
 }
 
-function SubscriptionSummary({ subscription }: { readonly subscription: Subscription }) {
+function SubscriptionSummary({
+  subscription,
+  onChangeModules,
+}: {
+  readonly subscription: Subscription;
+  readonly onChangeModules?: () => void;
+}) {
   return (
     <section data-testid="subscription-summary" className={`mx-auto max-w-2xl p-8 ${CARD}`}>
       <p className="text-sm font-medium text-brand-primary dark:text-brand-cyan">
@@ -364,6 +429,12 @@ function SubscriptionSummary({ subscription }: { readonly subscription: Subscrip
           Depois do teste grátis:{" "}
           <strong className="text-slate-900 dark:text-white">{formatBRL(subscription.monthlyTotalCents)}/mês</strong>
         </p>
+      ) : null}
+
+      {onChangeModules ? (
+        <Button variant="secondary" className="mt-8" onClick={onChangeModules}>
+          Alterar módulos
+        </Button>
       ) : null}
     </section>
   );
