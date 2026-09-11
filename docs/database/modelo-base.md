@@ -12,6 +12,7 @@ Fonte da verdade: [`prisma/schema.prisma`](../../prisma/schema.prisma) e [`prism
 | Campos de auditoria | `created_at`, `updated_at`; `deleted_at` para soft delete onde aplicável |
 | Tenant | `company_id` (equivalente ao `tenant_id` do MASTER SPEC) |
 | Exclusão | `ON DELETE RESTRICT` por padrão; `CASCADE` apenas em junções e sessões |
+| Dinheiro | inteiro em centavos (`amount_cents`), nunca ponto flutuante |
 
 ## Entidades
 
@@ -31,6 +32,11 @@ Fonte da verdade: [`prisma/schema.prisma`](../../prisma/schema.prisma) e [`prism
 | `audit_logs` | tenant (opcional) | append-only; sem empresa para eventos como login; com empresa, o autor precisa ser membro |
 | `sessions` | pessoa | `id` = SHA-256 do token; empresa ativa precisa ser vínculo da pessoa; expiração por inatividade e absoluta |
 | `rate_limit_buckets` | sistema | janela fixa por chave; chaves sem dado pessoal em claro |
+| `modules` | **global** | catálogo comercial (MASTER SPEC 2.3); `key` estável usada nos entitlements; `is_core`; `status` AVAILABLE/COMING_SOON/RETIRED; **povoado pela migração** (DEC-023) |
+| `module_dependencies` | **global** | "módulo depende de módulo" (MASTER SPEC 2.6); nenhuma dependência declarada ainda |
+| `module_prices` | **global** | preço por módulo em centavos, com histórico (`valid_from`/`valid_until`); **vazia** até a definição comercial |
+| `company_modules` | tenant | módulo contratado pela empresa (entitlement); PK `(company_id, module_key)`; toda empresa nova nasce com o Core |
+| `subscriptions` | tenant | uma por empresa; estado canônico e datas do trial; `TRIAL_EXPIRING`/`TRIAL_EXPIRED` são derivados do tempo (DEC-022) |
 
 ## Isolamento multi-tenant no banco
 
@@ -46,7 +52,8 @@ Consequências garantidas pelo PostgreSQL, mesmo com bug na aplicação:
 - documento da empresa A não aponta para categoria, filial, setor ou pessoa da empresa B;
 - perfil só é atribuído a quem é membro da empresa, e só com perfil daquela empresa;
 - sessão só tem como empresa ativa uma empresa da qual a pessoa é membro;
-- evento de auditoria de uma empresa só tem como autor um membro dela.
+- evento de auditoria de uma empresa só tem como autor um membro dela;
+- empresa só contrata módulo que existe no catálogo (FK `company_modules.module_key` → `modules.key`).
 
 Isso é **defesa em profundidade** — a autorização server-side por tenant continua obrigatória para leituras e filtros.
 
@@ -64,6 +71,8 @@ Isso é **defesa em profundidade** — a autorização server-side por tenant co
 | Id de sessão é SHA-256 | `sessions_id_format_chk` | `identity_memberships_sessions` |
 | Inatividade ≤ expiração absoluta | `sessions_expiry_order_chk` | `identity_memberships_sessions` |
 | Contador de tentativas positivo | `rate_limit_buckets_count_positive_chk` | `identity_memberships_sessions` |
+| Catálogo inicial de módulos | `INSERT` dos 17 módulos | `commercial_catalog_and_subscriptions` |
+| Core para empresas já existentes | `INSERT … SELECT` em `company_modules` | `commercial_catalog_and_subscriptions` |
 
 ## Migrações
 
@@ -71,6 +80,8 @@ Isso é **defesa em profundidade** — a autorização server-side por tenant co
 |---|---|
 | `20260910225812_init_base_entities` | enums, 11 tabelas, índices, FKs compostas por tenant, CHECKs e trigger append-only |
 | `20260911003408_identity_memberships_sessions` | pessoa global + `memberships` (com **migração de dados**: cada pessoa existente ganha vínculo com sua empresa; `DISABLED` → vínculo `SUSPENDED`; pessoa `INVITED` → ACTIVE com vínculo `INVITED`), CPF protegido, senha, `sessions`, `rate_limit_buckets` e FKs para vínculos |
+| `20260911021759_mfa_totp_recovery_codes` | segredo TOTP cifrado e códigos de recuperação |
+| `20260911033935_commercial_catalog_and_subscriptions` | `modules`, `module_dependencies`, `module_prices`, `company_modules` e `subscriptions`; povoa o catálogo e dá o Core a toda empresa já existente |
 
 A preservação de dados da migração `identity_memberships_sessions` foi verificada em 2026-09-11 num banco descartável: migração 1 → dados no formato antigo (pessoas INVITED/ACTIVE/DISABLED, perfil, documento com responsável e criador, auditoria) → migração 2 → vínculos e status corretos, nenhum registro perdido.
 
@@ -78,7 +89,7 @@ Fluxo:
 
 - desenvolvimento: `pnpm db:migrate` (`prisma migrate dev`, interativo). Em ambiente não interativo, gerar o SQL com `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` e revisar;
 - staging/produção: `pnpm db:deploy` (`prisma migrate deploy`) — nunca `migrate dev`/`reset`;
-- testes de integração recriam o schema do banco `*_test` e aplicam `migrate deploy` a cada execução.
+- testes de integração recriam o schema do banco `*_test` e aplicam `migrate deploy` a cada execução; a limpeza entre testes **preserva** as tabelas povoadas pela migração (`modules`, `module_dependencies`), senão o cadastro falharia pela FK do Core.
 
 ## Decisões pendentes
 
@@ -87,3 +98,4 @@ Fluxo:
 - Rotação das chaves `APP_ENCRYPTION_KEY` (formato cifrado já é versionado: `v1.`) e `APP_HMAC_KEY`.
 - Limpeza periódica de `sessions` expiradas e `rate_limit_buckets` vencidos (job).
 - Row-Level Security (RLS) do PostgreSQL como camada adicional de isolamento.
+- Preços dos módulos, kits e política de inadimplência (DEC-022 e DEC-023).

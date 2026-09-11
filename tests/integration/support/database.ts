@@ -18,11 +18,18 @@ export function createTestAuthServices(prisma: PrismaClient, now?: () => Date) {
   return buildAuthServices(prisma, TEST_APPLICATION_KEYS, now);
 }
 
-/** Limpa todas as tabelas da aplicação (inclusive audit_logs: TRUNCATE não dispara o trigger de UPDATE/DELETE). */
+/**
+ * Catálogo global povoado pelas próprias migrações. Apagá-lo quebraria o
+ * cadastro (toda empresa nova recebe o Core, com FK para `modules`) e deixaria
+ * o banco de teste diferente do de produção.
+ */
+const MIGRATION_SEEDED_TABLES = ["_prisma_migrations", "modules", "module_dependencies"];
+
+/** Limpa as tabelas da aplicação (inclusive audit_logs: TRUNCATE não dispara o trigger de UPDATE/DELETE). */
 export async function truncateAllTables(prisma: PrismaClient): Promise<void> {
   const rows = await prisma.$queryRaw<Array<{ tablename: string }>>`
     SELECT tablename FROM pg_tables
-    WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'
+    WHERE schemaname = 'public' AND NOT (tablename = ANY(${MIGRATION_SEEDED_TABLES}))
   `;
   if (rows.length === 0) return;
 

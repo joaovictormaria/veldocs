@@ -183,25 +183,26 @@ export function isCoreModule(key: string): boolean {
  * Expande a seleção incluindo as dependências (transitivas) de cada módulo.
  * O Core é sempre incluído: é obrigatório (2.2).
  */
-export function withDependencies(selection: readonly string[]): string[] {
-  const resolved = new Set<string>([CORE_MODULE_KEY]);
+export function withDependencies(selection: readonly string[]): ModuleKey[] {
+  const resolved = new Set<ModuleKey>([CORE_MODULE_KEY]);
 
-  const visit = (key: string) => {
+  const visit = (key: ModuleKey) => {
     if (resolved.has(key)) return;
     resolved.add(key);
     for (const dependency of findModule(key)?.dependsOn ?? []) visit(dependency);
   };
 
-  for (const key of selection) visit(key);
+  // Chave desconhecida é ignorada aqui; quem valida a seleção é o Builder.
+  for (const key of selection) if (isModuleKey(key)) visit(key);
 
   // Preserva a ordem do catálogo.
   return MODULE_KEYS.filter((key) => resolved.has(key));
 }
 
 /** Dependências que faltam na seleção (vazio = seleção válida). */
-export function missingDependencies(selection: readonly string[]): string[] {
+export function missingDependencies(selection: readonly string[]): ModuleKey[] {
   const selected = new Set(selection);
-  const missing = new Set<string>();
+  const missing = new Set<ModuleKey>();
 
   for (const key of selection) {
     for (const dependency of findModule(key)?.dependsOn ?? []) {
