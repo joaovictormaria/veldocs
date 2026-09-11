@@ -199,12 +199,12 @@ export function createFakeMfaService(validCode = "123456", initialStep = 1000) {
   };
 }
 
-export function createFakeEntitlements(enabled = true) {
+export function createFakeEntitlements(result: Awaited<ReturnType<EntitlementService["checkModule"]>> = "enabled") {
   const checks: string[] = [];
   const service: EntitlementService = {
-    async isModuleEnabled(companyId, moduleKey) {
+    async checkModule(companyId, moduleKey) {
       checks.push(`${companyId}:${moduleKey}`);
-      return enabled;
+      return result;
     },
   };
   return { service, checks };

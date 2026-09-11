@@ -50,6 +50,7 @@ Exemplos:
 - Portal de terceiros
 - Relatórios avançados
 - OCR
+- Score documental
 - Radar de risco
 - Modo auditoria
 
@@ -300,7 +301,7 @@ Auditado em 2026-09-11 (detalhes e evidências na seção 25 do `MASTER_PROJECT_
 - **FASE 0 — Produto e posicionamento:** concluída, incluindo a identidade visual ([`docs/brand/identidade-visual.md`](./docs/brand/identidade-visual.md)).
 - **FASE 1 — Fundação técnica:** concluída.
 - **FASE 2 — Segurança base:** quase concluída. Prontos: pessoa com vínculos multiempresa, cadastro, login por e-mail ou CPF + senha, sessão segura, limites de tentativa, auditoria, empresa ativa, permissões (RBAC) nas rotas, segundo fator obrigatório para OWNER/ADMIN, headers de segurança (CSP com nonce e HSTS), logs estruturados e limite por IP. Pendentes: verificação de e-mail, recuperação de senha, link mágico e login com Google (backlog).
-- **FASE 3 — Empresa + módulos comerciais:** primeira metade concluída — gestão da empresa (com CNPJ validado), filiais e setores, com isolamento por empresa, exclusão que recusa registro em uso e auditoria ([`docs/api/empresa-filiais-setores.md`](./docs/api/empresa-filiais-setores.md)). Segunda metade iniciada: catálogo com os 17 módulos da spec, entitlements por empresa e estados do trial de 14 dias no backend. Pendentes: membros, convites e perfis; Builder, preço em tempo real e início do trial; e as decisões comerciais (preços, kits, inadimplência).
+- **FASE 3 — Empresa + módulos comerciais:** primeira metade concluída — gestão da empresa (com CNPJ validado), filiais e setores, com isolamento por empresa, exclusão que recusa registro em uso e auditoria ([`docs/api/empresa-filiais-setores.md`](./docs/api/empresa-filiais-setores.md)). Segunda metade iniciada: catálogo com os 17 módulos da spec, entitlements por empresa e estados do trial de 14 dias no backend. Pendentes: membros, convites e perfis; Builder, preço em tempo real e início do trial; e as decisões comerciais de preços e kits.
 - **CI/CD:** GitHub Actions (lint, tipos, testes unitários, integração, build e E2E) e deploy no Railway somente com CI verde.
 
 Produção: https://veldocs-app-production.up.railway.app

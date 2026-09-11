@@ -3,7 +3,7 @@ import {
   canTransition,
   EFFECTIVE_STATUSES,
   effectiveStatus,
-  grantsPaidModules,
+  grantsAccess,
   isReactivation,
   SUBSCRIPTION_STATUSES,
   TRIAL_DAYS,
@@ -79,17 +79,25 @@ describe("estados fora do trial", () => {
   });
 });
 
-describe("acesso aos módulos pagos", () => {
+describe("acesso ao sistema (DEC-022)", () => {
   it("liberado em trial vigente, ativo, reativado e pagamento em processamento", () => {
     for (const status of ["TRIAL_ACTIVE", "TRIAL_EXPIRING", "ACTIVE", "REACTIVATED", "PAYMENT_PENDING"] as const) {
-      expect(grantsPaidModules(status), status).toBe(true);
+      expect(grantsAccess(status), status).toBe(true);
     }
   });
 
-  it("bloqueado com trial vencido, inadimplência, cancelamento e suspensão", () => {
+  it("bloqueado com trial vencido, atraso, cancelamento e suspensão — sem carência", () => {
     for (const status of ["TRIAL_EXPIRED", "PAST_DUE", "CANCELED", "SUSPENDED"] as const) {
-      expect(grantsPaidModules(status), status).toBe(false);
+      expect(grantsAccess(status), status).toBe(false);
     }
+  });
+
+  it("todo estado possível tem uma regra explícita", () => {
+    const allowed = EFFECTIVE_STATUSES.filter((status) => grantsAccess(status));
+    const blocked = EFFECTIVE_STATUSES.filter((status) => !grantsAccess(status));
+
+    expect(allowed.length + blocked.length).toBe(EFFECTIVE_STATUSES.length);
+    expect([...blocked].sort()).toEqual(["CANCELED", "PAST_DUE", "SUSPENDED", "TRIAL_EXPIRED"]);
   });
 });
 

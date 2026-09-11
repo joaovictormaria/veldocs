@@ -18,6 +18,7 @@ export type AuthorizationFailure =
   | "active_company_required"
   | "forbidden"
   | "module_not_enabled"
+  | "subscription_inactive"
   | "mfa_enrollment_required"
   | "mfa_required";
 
@@ -29,8 +30,8 @@ export type AuthorizationResult =
  * Cadeia de autorização do MASTER SPEC:
  * sessão → pessoa ativa → empresa ativa → vínculo ativo em empresa ativa →
  * segundo fator (quando o perfil exige) → permissão do perfil → entitlement
- * do módulo. A verificação do recurso fica na consulta, sempre filtrada por
- * `context.companyId`.
+ * (assinatura válida e módulo ativo). A verificação do recurso fica na
+ * consulta, sempre filtrada por `context.companyId`.
  */
 export function createAuthorizer(deps: {
   readonly sessions: SessionManager;
@@ -65,9 +66,9 @@ export function createAuthorizer(deps: {
 
     if (!access.permissions.includes(permission)) return { ok: false, reason: "forbidden" };
 
-    if (!(await deps.entitlements.isModuleEnabled(companyId, moduleOfPermission(permission)))) {
-      return { ok: false, reason: "module_not_enabled" };
-    }
+    // Assinatura inválida bloqueia tudo, Core incluído (DEC-022).
+    const entitlement = await deps.entitlements.checkModule(companyId, moduleOfPermission(permission));
+    if (entitlement !== "enabled") return { ok: false, reason: entitlement };
 
     return {
       ok: true,

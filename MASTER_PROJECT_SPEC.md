@@ -290,6 +290,8 @@ Ao término dos 14 dias, caso não exista assinatura válida:
 - recursos de escrita e/ou módulos pagos podem ser bloqueados;
 - deve existir caminho claro para assinatura/reativação.
 
+**Decisão (2026-09-11):** sem assinatura válida, **tudo** é bloqueado — Core incluído e sem carência na inadimplência — e os dados ficam guardados para quando a empresa assinar. Login, sessão, segundo fator e troca de empresa continuam acessíveis. Detalhes em DEC-022.
+
 ## 2.10 Expansão de receita / upsell contextual
 
 O produto deve incentivar a ativação de módulos adicionais sem dark patterns.
@@ -1164,7 +1166,7 @@ Permissões funcionais
 
 A desativação de um módulo deve bloquear suas capacidades conforme a política comercial, sem destruir dados automaticamente.
 
-**Status (2026-09-11):** 🟡 PARCIAL — a relação empresa → assinatura → módulos ativos → entitlements existe no banco e na cadeia de autorização (DEC-022); módulo desativado fica bloqueado sem apagar dados. Faltam a ativação/desativação pelo Builder e as permissões funcionais dos módulos pagos.
+**Status (2026-09-11):** 🟡 PARCIAL — a relação empresa → assinatura → módulos ativos → entitlements existe no banco e na cadeia de autorização (DEC-022); módulo desativado fica bloqueado e assinatura inválida bloqueia a empresa inteira — nos dois casos sem apagar dados. Faltam a ativação/desativação pelo Builder e as permissões funcionais dos módulos pagos.
 
 ---
 
@@ -1284,7 +1286,7 @@ As recomendações devem ser:
 
 ## FASE 3 — Empresa, usuários e módulos comerciais
 
-**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada. Da segunda, já existem o catálogo de módulos, os entitlements por empresa e os estados do trial no backend; faltam o Builder, o preço em tempo real, o início do trial e as decisões comerciais (preços, kits, inadimplência). Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
+**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada. Da segunda, já existem o catálogo de módulos, os entitlements por empresa e os estados do trial no backend; faltam o Builder, o preço em tempo real, o início do trial e as decisões comerciais de preços e kits. Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
 
 - ✅ CONCLUÍDO — Empresas (entidade, criação no cadastro e edição dos dados cadastrais com CNPJ validado)
   - Evidência: `PATCH /api/company` (`company.update`), `src/application/access/manage-company.ts`, `src/domain/company/cnpj.ts`; auditoria `company.updated`.
@@ -1300,7 +1302,7 @@ As recomendações devem ser:
   - Evidência: os 17 módulos da seção 2.3 em `src/domain/billing/module-catalog.ts`, povoados pela migração `commercial_catalog_and_subscriptions` (DEC-023); tabelas `modules`, `module_dependencies` e `module_prices`. Teste de integração compara banco × domínio.
   - Pendente: preços (tabela pronta, vazia até a definição comercial), kits e dependências além do Core.
 - ✅ CONCLUÍDO — Entitlements (verificação na cadeia de autorização)
-  - Evidência: `company_modules` por empresa; `src/infrastructure/access/database-entitlements.ts` substitui o provisório "só Core"; o Core é sempre liberado e provisionado no cadastro; módulo pago exige contratação ativa **e** assinatura que conceda acesso (DEC-022).
+  - Evidência: `company_modules` por empresa; `src/infrastructure/access/database-entitlements.ts` substitui o provisório "só Core"; o Core é provisionado no cadastro; assinatura inválida bloqueia tudo, Core incluído, sem apagar dados; empresa sem assinatura (antes do Builder) usa o Core; módulo pago exige contratação ativa **e** assinatura válida (DEC-022).
   - Testes: `tests/integration/access/entitlements.test.ts` (trial vigente e vencido, módulo não contratado ou desativado, sem assinatura, PAST_DUE/CANCELED/SUSPENDED, isolamento entre empresas, FK do catálogo, Core no cadastro) — passaram (local, 2026-09-11).
   - Observação: nenhuma permissão pertence ainda a módulo pago — as capacidades desses módulos são de fases futuras, e o bloqueio passa a valer automaticamente quando existirem. Ativar e desativar módulos é parte do Builder.
 - 🔴 NÃO IMPLEMENTADO — Builder
@@ -1600,7 +1602,7 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 ---
 
-## DEC-022 — Estados do trial derivados do tempo
+## DEC-022 — Estados do trial derivados do tempo e bloqueio sem assinatura válida
 
 **Status:** ✅ CONCLUÍDO (implementado na FASE 3)
 
@@ -1608,9 +1610,11 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 **Motivo:** gravar "trial expirado" exigiria um processo agendado virando linhas, e entre duas execuções o banco diria "em trial" com o prazo já vencido. Derivando, o estado é sempre exato e não há nada a agendar.
 
-**Política de acesso aos módulos pagos:** liberados em `TRIAL_ACTIVE`, `TRIAL_EXPIRING`, `ACTIVE`, `REACTIVATED` e `PAYMENT_PENDING`; bloqueados em `TRIAL_EXPIRED`, `PAST_DUE`, `CANCELED` e `SUSPENDED`. O **Core nunca é bloqueado**, para cumprir a seção 2.9 (dados preservados e caminho de reativação). "Terminando" = últimos 3 dias.
+**Política de acesso (decisão do usuário em 2026-09-11):** com assinatura válida — `TRIAL_ACTIVE`, `TRIAL_EXPIRING`, `ACTIVE`, `REACTIVATED` ou `PAYMENT_PENDING` — a empresa usa o Core e os módulos contratados. Com assinatura inválida — `TRIAL_EXPIRED`, `PAST_DUE`, `CANCELED` ou `SUSPENDED` — **bloqueia tudo, Core incluído**, sem carência na inadimplência (HTTP 403 `subscription_inactive`). **Nada é apagado:** os dados ficam guardados e voltam a ficar acessíveis quando a empresa assinar. "Terminando" = últimos 3 dias.
 
-**Pendente (decisão comercial):** carência na inadimplência (`PAST_DUE` hoje bloqueia na hora) e se o trial vencido deve bloquear também escrita no Core.
+**Empresa sem assinatura:** ainda não passou pelo Builder, onde o trial começa, e usa o Core normalmente. Tratar esse caso como bloqueado trancaria toda conta nova e todas as que já existem.
+
+**Continuam acessíveis durante o bloqueio:** login, sessão, logout, segundo fator e troca de empresa — rotas que não passam pelo autorizador. É o caminho para assinar ou reativar exigido pela seção 2.9; as rotas de assinatura entram com o Builder e a cobrança.
 
 **Evidência:** `src/domain/billing/subscription-status.ts`, `src/infrastructure/access/database-entitlements.ts`; `tests/unit/domain/billing/subscription-status.test.ts` e `tests/integration/access/entitlements.test.ts` — passaram.
 
@@ -1642,7 +1646,7 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 **Billing:** 🔴 NÃO IMPLEMENTADO
 **WhatsApp:** 🔴 NÃO IMPLEMENTADO
 **IA:** 🔴 NÃO IMPLEMENTADO
-**Testes:** 🟡 PARCIAL (305 unitários, 104 integração, 23 E2E; CI bloqueando o deploy)
+**Testes:** 🟡 PARCIAL (308 unitários, 106 integração, 23 E2E; CI bloqueando o deploy)
 
 ## Bloqueadores
 
@@ -1651,7 +1655,7 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 - **Arquivos vetoriais da logo (SVG):** não bloqueia; os recortes raster atuais atendem a página e os ícones.
 
 - ⏳ **Proteção da branch `main`**: exige GitHub Pro ou repositório público.
-- Decisões comerciais pendentes da FASE 3: preços dos módulos, kits, dependências além do Core, carência na inadimplência e se o trial vencido bloqueia também a escrita no Core. O catálogo e os estados do trial seguem a seção 2 e já estão implementados.
+- Decisões comerciais pendentes da FASE 3: preços dos 17 módulos (inclusive o preço-base do Core), kits e dependências além do Core. Carência e bloqueio sem assinatura foram decididos em 2026-09-11 (DEC-022).
 - Decisões pendentes sem bloqueio imediato: unicidade de CNPJ entre empresas, retenção de `audit_logs` × LGPD, adoção de RLS, rotação de chaves.
 
 ## Regra final
@@ -1920,3 +1924,40 @@ Verificação em produção: após o merge e o deploy (a migração roda no pre-
 
 - As primeiras verificações do Docker por `localhost:3000` foram atendidas por um `next dev` órfão no host, que escutava também em IPv6, e não pelo container. Foram refeitas de dentro do container, depois de encerrar o processo órfão.
 - No Windows, encerrar um comando em segundo plano pode deixar processos filhos vivos (`pnpm` → `next`, `docker compose watch`). Conferir portas e processos antes de dar uma verificação por concluída.
+
+---
+
+## 2026-09-11 — FASE 3: política de bloqueio sem assinatura válida
+
+### Decisões do usuário
+
+| Pergunta | Resposta |
+|---|---|
+| Carência antes de bloquear inadimplente? | Não: `PAST_DUE` bloqueia na hora |
+| O trial vencido bloqueia também o Core? | Sim, bloqueia tudo; os dados ficam guardados até a empresa assinar |
+
+### O que mudou
+
+| Item | Evidência |
+|---|---|
+| Porta | `EntitlementService.checkModule` devolve `enabled`, `module_not_enabled` ou `subscription_inactive` (antes: sim/não) |
+| Autorização | nova recusa `subscription_inactive` — HTTP 403 com mensagem orientando a assinar |
+| Regra | `src/infrastructure/access/database-entitlements.ts`: assinatura inválida bloqueia tudo; empresa sem assinatura (antes do Builder) segue usando o Core; módulo pago exige assinatura válida e contratação ativa |
+| Fora do bloqueio | login, sessão, logout, segundo fator e troca de empresa não passam pelo autorizador |
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm lint` / `tsc --noEmit` | ✅ sem erros |
+| `pnpm test` | ✅ 25 arquivos, 308 testes (novos: recusa `subscription_inactive` no autorizador e na resposta HTTP; todo estado com regra explícita) |
+| `pnpm test:integration` | ✅ 8 arquivos, 106 testes (novos: trial vencido e `PAST_DUE`/`CANCELED`/`SUSPENDED` bloqueiam o Core; empresa sem assinatura usa o Core; pela cadeia de autorização real: bloqueio, dados intactos e liberação ao assinar) |
+| `pnpm test:e2e` | ✅ 23 testes |
+| `pnpm build` | ✅ |
+
+Verificação em produção: após o merge e o deploy. Nenhuma empresa tem assinatura hoje — o trial nasce no Builder —, então a mudança não bloqueia ninguém.
+
+### Observações
+
+- Toda requisição autorizada passa a consultar a assinatura da empresa (busca por chave única, indexada).
+- A spec (2.3) lista 16 módulos contratáveis além do Core; o README listava 15 e omitia "Score documental" — corrigido.

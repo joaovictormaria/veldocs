@@ -72,17 +72,17 @@ export function effectiveStatus(state: SubscriptionState, now: Date): EffectiveS
 }
 
 /**
- * Estados em que os módulos PAGOS continuam utilizáveis.
+ * Estados em que a empresa pode usar o sistema.
  *
- * O Core nunca depende disto: a spec (2.9) exige que a empresa continue
- * acessando seus dados e tenha caminho para reativar, então o bloqueio atinge
- * apenas os módulos contratados.
+ * Decisão do usuário (2026-09-11, DEC-022): sem assinatura válida o bloqueio
+ * é TOTAL — Core incluído — e não há carência na inadimplência. Nada é
+ * apagado: os dados ficam guardados e voltam a ficar acessíveis quando a
+ * empresa assinar.
  *
- * `PAST_DUE` bloqueia — é inadimplência já reconhecida; `PAYMENT_PENDING`
- * libera, porque o pagamento está em processamento. A política definitiva de
- * inadimplência (carência, bloqueio de escrita) é decisão comercial pendente.
+ * `PAYMENT_PENDING` libera porque o pagamento está em processamento, e não em
+ * atraso; `PAST_DUE` (atraso reconhecido) bloqueia na hora.
  */
-const GRANTS_PAID_MODULES: ReadonlySet<EffectiveStatus> = new Set<EffectiveStatus>([
+const GRANTS_ACCESS: ReadonlySet<EffectiveStatus> = new Set<EffectiveStatus>([
   "TRIAL_ACTIVE",
   "TRIAL_EXPIRING",
   "ACTIVE",
@@ -90,8 +90,8 @@ const GRANTS_PAID_MODULES: ReadonlySet<EffectiveStatus> = new Set<EffectiveStatu
   "PAYMENT_PENDING",
 ]);
 
-export function grantsPaidModules(status: EffectiveStatus): boolean {
-  return GRANTS_PAID_MODULES.has(status);
+export function grantsAccess(status: EffectiveStatus): boolean {
+  return GRANTS_ACCESS.has(status);
 }
 
 /** Transições permitidas do estado canônico. */

@@ -8,6 +8,7 @@ describe("respostas de autorização", () => {
     ["active_company_required", 403],
     ["forbidden", 403],
     ["module_not_enabled", 403],
+    ["subscription_inactive", 403],
   ])("%s → HTTP %i com código estável e sem cache", async (reason, status) => {
     const response = authorizationFailureResponse(reason);
 
