@@ -322,3 +322,23 @@ pnpm dev               # http://localhost:3000
 ```
 
 Qualidade: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:integration`, `pnpm test:e2e`, `pnpm build`.
+
+### Rodando tudo em Docker
+
+Alternativa ao `pnpm dev`: a aplicação também roda em container, junto com o banco.
+
+```bash
+pnpm docker:dev    # sobe app + banco e sincroniza as alterações do código
+pnpm docker:logs   # acompanha os logs da aplicação
+pnpm docker:down   # encerra tudo
+```
+
+`pnpm docker:dev` usa `docker compose watch` e precisa **ficar rodando**: é ele quem copia para o container o que muda em `src/` e `public/` (leva ~5 s até a alteração aparecer). Alterações em `package.json`, `pnpm-lock.yaml`, `prisma/`, `next.config.ts` ou `tsconfig.json` reconstroem a imagem automaticamente.
+
+Para apenas executar sem sincronizar o código, use `pnpm docker:up` (em segundo plano).
+
+O código **não** é montado do host: em Windows o watcher de arquivos não é confiável através de bind mount, então o código vai na imagem e o `watch` mantém o container em dia. O `Dockerfile` também tem o alvo `runner`, com build de produção, para conferir localmente o que roda no Railway:
+
+```bash
+docker build --target runner -t veldocs-prod . && docker run --rm --env-file .env -p 3000:3000 veldocs-prod
+```

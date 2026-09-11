@@ -23,5 +23,53 @@ services:
       timeout: 5s
       retries: 20
 
+  # Aplicação em modo desenvolvimento (recarga automática).
+  #
+  # O código NÃO é montado do host: em Windows o watcher do Turbopack não
+  # recebe os eventos de alteração através do bind mount e a página nunca
+  # recarrega. O código vai na imagem e `pnpm docker:dev` (docker compose
+  # watch) copia para o container o que mudar no host.
+  app:
+    build:
+      context: .
+      target: dev
+    container_name: veldocs-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      # Dentro da rede do compose o banco é o serviço `postgres`, não o loopback.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-veldocs}:${POSTGRES_PASSWORD:-veldocs_dev_only}@postgres:5432/${POSTGRES_DB:-veldocs_dev}
+      APP_URL: http://localhost:3000
+      APP_ENV: development
+    ports:
+      - "127.0.0.1:3000:3000"
+    develop:
+      watch:
+        # Código da aplicação: copiado para o container e servidor reiniciado.
+        # Só copiar não basta — escritas feitas de fora no sistema de arquivos
+        # do container não geram eventos de inotify para o processo de dentro,
+        # então o Turbopack não recompilaria (o dev server sobe em ~0,5 s).
+        - action: sync
+          path: ./src
+          target: /app/src
+        - action: sync
+          path: ./public
+          target: /app/public
+        # Mudanças que exigem instalar dependências ou regerar o client do
+        # Prisma não podem ser só copiadas: a imagem é reconstruída.
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./pnpm-lock.yaml
+        - action: rebuild
+          path: ./prisma
+        - action: rebuild
+          path: ./next.config.ts
+        - action: rebuild
+          path: ./tsconfig.json
+
 volumes:
   veldocs-postgres-data:
