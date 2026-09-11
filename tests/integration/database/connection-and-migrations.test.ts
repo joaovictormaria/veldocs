@@ -91,7 +91,7 @@ describe("conexão e migrações", () => {
     for (const table of TENANT_SCOPED_TABLES) {
       expect(nullableByTable[table], table).toBe("NO");
     }
-    // Auditoria aceita eventos sem empresa (ex.: login); a pessoa é global (DEC-005).
+    // Auditoria aceita eventos sem empresa (ex.: login); a pessoa é global (DEC-009).
     expect(nullableByTable.audit_logs).toBe("YES");
     expect(nullableByTable.users).toBeUndefined();
   });

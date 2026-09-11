@@ -4,7 +4,7 @@
 // Multi-tenancy: `Company` é o tenant. Toda entidade empresarial possui
 // `company_id` (equivalente ao tenant_id do MASTER SPEC).
 //
-// Identidade (FASE 2, DEC-005): `User` é a pessoa, global. O acesso a cada
+// Identidade (FASE 2, DEC-009): `User` é a pessoa, global. O acesso a cada
 // empresa acontece por `Membership` (uma pessoa pode estar em várias empresas).
 // Perfis, responsáveis por documentos e autores de auditoria referenciam o
 // vínculo `(company_id, user_id)`, garantindo que a pessoa é membro daquela
@@ -243,7 +243,7 @@ model DocumentCategory {
 }
 
 /// Metadados do documento. Arquivos/versões (DocumentVersion) e storage
-/// privado pertencem às fases 5–7 e 13.
+/// privado pertencem às fases 5 (storage) e 6 (versionamento).
 model Document {
   id                String    @id @default(uuid(7)) @db.Uuid
   companyId         String    @map("company_id") @db.Uuid

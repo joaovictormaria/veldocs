@@ -1,14 +1,87 @@
 # VELDOCS
 
-**Gestão inteligente de documentos empresariais.**
-
-O VELDOCS é um SaaS B2B criado para empresas organizarem, monitorarem e controlarem documentos, vencimentos, responsáveis, pendências e processos de renovação.
+**Gestão inteligente de documentos empresariais.**  
+**by VELNOX.IA**
 
 > **Zero surpresa documental.**
 
-## Visão
+## O que é
 
-O VELDOCS não deve ser apenas um local para armazenar PDFs. O objetivo é funcionar como um assistente operacional da documentação empresarial: organizar, monitorar, alertar, explicar riscos, sugerir ações e, quando autorizado, executar tarefas.
+O VELDOCS é um SaaS B2B para empresas organizarem, monitorarem e controlarem documentos, vencimentos, responsáveis, pendências, contratos e processos relacionados à documentação empresarial.
+
+O objetivo não é ser apenas um armazenamento de arquivos. O VELDOCS deve funcionar como um **assistente operacional da documentação da empresa**: organiza, monitora, alerta, explica, recomenda e, quando autorizado, executa ações.
+
+## Modelo do produto
+
+O VELDOCS será **modular**.
+
+Depois do cadastro, a empresa entra no **VELDOCS Builder** e escolhe quais módulos deseja utilizar.
+
+```text
+CADASTRO
+   ↓
+VELDOCS BUILDER
+   ↓
+Escolha dos módulos
+   ↓
+Preço mensal em tempo real
+   ↓
+14 DIAS GRÁTIS
+   ↓
+Uso do sistema
+   ↓
+Assinatura / reativação
+```
+
+O **Core VELDOCS** é a base obrigatória. Os demais módulos podem ter preço próprio.
+
+Exemplos:
+
+- Vencimentos
+- Funcionários
+- Fornecedores
+- Contratos
+- Solicitações
+- Aprovações
+- Automações
+- Análise inteligente
+- Assistente IA
+- WhatsApp
+- Portal de terceiros
+- Relatórios avançados
+- OCR
+- Radar de risco
+- Modo auditoria
+
+O cliente deve sempre visualizar o impacto de cada ativação/desativação no valor mensal.
+
+## Trial
+
+Após montar sua configuração, a empresa recebe **14 dias gratuitos** para experimentar o VELDOCS conforme as regras do trial.
+
+O sistema deve informar claramente:
+
+- dias restantes;
+- módulos ativos;
+- valor mensal após o trial;
+- oportunidades de expansão;
+- caminho para assinatura.
+
+Quando o trial terminar sem assinatura válida, a conta entra em estado controlado. Os dados não devem ser apagados imediatamente.
+
+## Expansão modular
+
+O VELDOCS deve incentivar novos módulos por **valor contextual**, e não por pressão.
+
+Exemplos:
+
+> Você cadastrou muitos funcionários. O módulo Funcionários pode facilitar o controle da documentação deles.
+
+> Você realizou várias consultas de documentos. O WhatsApp pode permitir consultas rápidas sem abrir o dashboard.
+
+> Você enviou muitos documentos manualmente. A análise inteligente pode extrair os dados automaticamente.
+
+O sistema pode oferecer testes limitados, recomendações, prévias e kits com desconto.
 
 ## Principais capacidades
 
@@ -26,21 +99,32 @@ O VELDOCS não deve ser apenas um local para armazenar PDFs. O objetivo é funci
 - Assistente com IA
 - Integração com WhatsApp
 - OCR e extração de dados
-- Radar de risco e score documental
+- Score e radar de risco
+- Modo auditoria
 
-## Diferencial
+## Canais
 
-O produto deve combinar **Dashboard + WhatsApp + Assistente/IA + Automações** sobre um mesmo motor documental seguro.
+### Dashboard
 
-O usuário poderá, por exemplo:
+É o centro administrativo para configuração, gestão e análise.
+
+### WhatsApp
+
+É a interface rápida para consultas e ações autorizadas.
+
+Exemplo:
 
 > “Como está o contrato da Empresa X?”
 
-E receber o status real do documento, respeitando empresa, usuário e permissões.
+O sistema consulta os dados reais respeitando empresa, usuário, RBAC e entitlement do módulo.
+
+### IA
+
+É o copiloto operacional dentro do dashboard e, futuramente, também no WhatsApp.
 
 ## Segurança
 
-A segurança é parte central da arquitetura. O projeto deve considerar, desde o início:
+A segurança é parte central da arquitetura. O projeto deve considerar desde o início:
 
 - Multi-tenancy seguro
 - RBAC e autorização server-side
@@ -56,56 +140,98 @@ A segurança é parte central da arquitetura. O projeto deve considerar, desde o
 - Segurança da IA e proteção contra prompt injection
 - Backup e recuperação
 
-As principais referências de segurança são o **OWASP ASVS 5.0** e o **OWASP API Security Top 10**.
+Referências principais:
 
-## Arquitetura inicial
+- OWASP ASVS 5.0
+- OWASP API Security Top 10
 
-O VELDOCS começa como um **monólito modular**, com fronteiras claras entre apresentação, aplicação, domínio e infraestrutura. A arquitetura deve permitir escalar workers e componentes específicos futuramente sem introduzir microserviços prematuramente.
+## Arquitetura
+
+O VELDOCS começa como **monólito modular**, evitando microserviços prematuros, mas mantendo fronteiras claras para evolução futura.
 
 ```text
-Usuário
-  ├── Dashboard
-  └── WhatsApp
-          │
-          ▼
-      API / Backend
-          │
-   ┌──────┼────────┐
-   │      │        │
- Auth   Tenant    RBAC
-   │      │        │
-   └──────┼────────┘
-          │
-     Módulos de negócio
-          │
-   PostgreSQL + Storage
-          │
-     Redis / Workers
-          │
-   OCR / Antivírus / Alertas
+                         VELDOCS
+                            │
+          ┌─────────────────┼─────────────────┐
+          │                 │                 │
+      Dashboard         WhatsApp             IA
+          │                 │                 │
+          └─────────────────┼─────────────────┘
+                            │
+                       API / Backend
+                            │
+               ┌────────────┼────────────┐
+               │            │            │
+              Auth       Tenant        RBAC
+               │            │            │
+               └────────────┼────────────┘
+                            │
+                      Entitlements
+                            │
+                     Módulos de negócio
+                            │
+                PostgreSQL + Storage
+                            │
+                       Redis / Workers
 ```
 
-## Estrutura do projeto
+## Stack oficial
 
-O arquivo [`MASTER_PROJECT_SPEC.md`](./MASTER_PROJECT_SPEC.md) é a fonte única de verdade para a implementação.
+### Frontend
+
+- Next.js
+- React
+- TypeScript
+
+### Backend
+
+- Node.js
+- TypeScript
+- Monólito modular
+
+### Dados
+
+- PostgreSQL
+- Prisma
+
+### Validação
+
+- Zod
+
+### Testes
+
+- Vitest
+- Playwright
+
+### Infraestrutura planejada
+
+- Redis
+- Object Storage privado S3/R2 ou equivalente
+- Workers
+- WhatsApp Business API
+- Provedor de IA via interface desacoplada
+- E-mail transacional
+
+Python não será a linguagem principal neste momento.
+
+## Estrutura de documentação
+
+O arquivo [`MASTER_PROJECT_SPEC.md`](./MASTER_PROJECT_SPEC.md) é a **fonte única de verdade** para a implementação.
 
 ```text
 VELDOCS/
 ├── MASTER_PROJECT_SPEC.md
 ├── README.md
 ├── docs/
-│   ├── product/          # visão do produto (FASE 0)
-│   ├── architecture/     # fundação técnica, camadas, ambientes
-│   └── database/         # modelo de dados base
-├── prisma/               # schema e migrações (PostgreSQL)
-├── src/
-│   ├── app/              # apresentação: rotas Next.js e route handlers
-│   ├── presentation/     # apresentação: UI reutilizável
-│   ├── application/      # casos de uso e portas (interfaces)
-│   ├── domain/           # regras e tipos de domínio
-│   └── infrastructure/   # config, banco e integrações concretas
-├── tests/                # unit, integration, e2e
-└── docker-compose.yml    # PostgreSQL local
+│   ├── architecture/
+│   ├── security/
+│   ├── modules/
+│   ├── api/
+│   ├── database/
+│   └── audits/
+├── frontend/
+├── backend/
+└── ...
 ```
 
 ## Regra de desenvolvimento
@@ -122,7 +248,7 @@ Antes de implementar qualquer funcionalidade:
 
 Nenhuma funcionalidade deve ser considerada concluída apenas porque existe uma tela ou um arquivo de código.
 
-## Status
+### Status
 
 - ✅ CONCLUÍDO
 - 🟡 PARCIAL
@@ -131,40 +257,66 @@ Nenhuma funcionalidade deve ser considerada concluída apenas porque existe uma 
 - ⏳ BLOQUEADO
 - 🔍 AUDITAR
 
+### Evidência de conclusão
+
+Para marcar ✅, registrar:
+
+- arquivos/evidências;
+- testes;
+- resultado;
+- data;
+- observações.
+
 ## Roadmap resumido
 
-**MVP**
+**FASE 0 — Produto e posicionamento**  
+Marca → proposta → público → modelo modular → Core + módulos → trial de 14 dias
 
-Empresa → Usuários → Permissões → Documentos → Storage → Vencimentos → Alertas → Dashboard → Auditoria → Versionamento
+**FASE 1 — Fundação técnica**  
+Next.js → React → TypeScript → Node.js → PostgreSQL → Prisma → Zod → testes → monólito modular
 
-**V2**
+**FASE 2 — Segurança base**  
+Auth → sessão → multi-tenancy → RBAC → rate limiting → auditoria
 
-Funcionários → Fornecedores → Solicitações → Aprovações → Portal externo → Contratos → Automações → Calendário → Relatórios
+**FASE 3 — Empresa + módulos comerciais**  
+Usuários → empresas → permissões → catálogo → entitlements → Builder → trial
 
-**V3**
+**FASE 4–7 — MVP**  
+Documentos → storage → vencimentos → alertas → dashboard → histórico → versionamento → testes → staging
 
-IA → OCR → Detecção inteligente → Score → Radar de risco → WhatsApp → Ações via WhatsApp → Assistente proativo → Modo auditoria
+**FASE 8–12 — Expansão operacional**  
+Beta → funcionários → fornecedores → solicitações → aprovações → portal → contratos → automações
 
-**Produto maduro**
+**FASE 13–15 — Inteligência**  
+IA → OCR → análise → risco → score → WhatsApp → ações → modo auditoria
 
-Billing → Administração → Observabilidade → Escala → Integrações → Ecossistema
+**FASE 16–20 — Escala comercial e plataforma**  
+Billing → upsell → observabilidade → segurança avançada → integrações → ecossistema
 
 ## Estado atual
 
-FASE 0 (produto) e FASE 1 (fundação técnica) concluídas — ver status e evidências no `MASTER_PROJECT_SPEC.md`. O desenvolvimento deve seguir o roadmap detalhado do `MASTER_PROJECT_SPEC.md`.
+Auditado em 2026-09-11 (detalhes e evidências na seção 25 do `MASTER_PROJECT_SPEC.md`):
 
-### Primeiros passos
+- **FASE 0 — Produto e posicionamento:** concluída, exceto a identidade visual (logo e cor padrão aguardando arquivos).
+- **FASE 1 — Fundação técnica:** concluída.
+- **FASE 2 — Segurança base:** parcial. Em produção: pessoa com vínculos multiempresa, cadastro, login por e-mail ou CPF + senha, sessão segura, limites de tentativa e auditoria. Pendentes: RBAC e tenant nas rotas de negócio, MFA, verificação de e-mail, recuperação de senha, link mágico, Google, CSP/HSTS e logs.
+- **FASE 3 — Empresa + módulos comerciais:** não iniciada (catálogo de módulos, entitlements, Builder, preço e trial ainda não existem).
+- **CI/CD:** GitHub Actions (lint, tipos, testes unitários, integração, build e E2E) e deploy no Railway somente com CI verde.
 
-Requisitos: Node.js 24, pnpm 10, Docker.
+Produção: https://veldocs-app-production.up.railway.app
+
+> A estrutura real do código é um único app Next.js em camadas (`src/app`, `src/presentation`, `src/application`, `src/domain`, `src/infrastructure`), com `prisma/` e `tests/`, e não pastas `frontend/` e `backend/` separadas. Ver [`docs/architecture/fundacao-tecnica.md`](./docs/architecture/fundacao-tecnica.md).
+
+### Primeiros passos (desenvolvimento)
+
+Requisitos: Node.js 24, pnpm 10 e Docker.
 
 ```bash
-cp .env.example .env
+cp .env.example .env   # gere APP_ENCRYPTION_KEY e APP_HMAC_KEY conforme o arquivo
 pnpm install
-pnpm db:up        # PostgreSQL local (127.0.0.1:5440)
-pnpm db:deploy    # aplica migrações
-pnpm dev          # http://localhost:3000
+pnpm db:up             # PostgreSQL local (127.0.0.1:5440)
+pnpm db:deploy         # aplica as migrações
+pnpm dev               # http://localhost:3000
 ```
 
 Qualidade: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:integration`, `pnpm test:e2e`, `pnpm build`.
-
-Detalhes: [`docs/architecture/fundacao-tecnica.md`](./docs/architecture/fundacao-tecnica.md).
