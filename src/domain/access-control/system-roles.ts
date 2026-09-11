@@ -21,6 +21,8 @@ export const PERMISSION_CATALOG = {
   "documents.update": "Editar documentos",
   "documents.delete": "Excluir documentos",
   "audit.read": "Ver a trilha de auditoria",
+  "billing.read": "Ver módulos, kits, preços e a assinatura da empresa",
+  "billing.manage": "Escolher módulos e kits e iniciar o trial",
 } as const;
 
 export type CatalogPermission = keyof typeof PERMISSION_CATALOG;

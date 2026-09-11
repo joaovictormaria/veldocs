@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  bypassesSubscription,
   CORE_MODULE_KEY,
   MODULE_KEYS,
   moduleOfPermission,
   PERMISSION_MODULE,
+  SUBSCRIPTION_EXEMPT_PERMISSIONS,
 } from "@/domain/access-control/permission-modules";
 import { ALL_PERMISSIONS } from "@/domain/access-control/system-roles";
 
@@ -24,5 +26,14 @@ describe("módulo de cada permissão", () => {
   it("as chaves de módulo vêm do catálogo comercial", () => {
     expect(MODULE_KEYS[0]).toBe(CORE_MODULE_KEY);
     expect(MODULE_KEYS.length).toBeGreaterThan(1);
+  });
+});
+
+describe("permissões que valem com a assinatura inválida", () => {
+  it("são só as de assinatura — nada do negócio escapa do bloqueio", () => {
+    expect([...SUBSCRIPTION_EXEMPT_PERMISSIONS].sort()).toEqual(["billing.manage", "billing.read"]);
+    for (const permission of ALL_PERMISSIONS) {
+      expect(bypassesSubscription(permission), permission).toBe(permission.startsWith("billing."));
+    }
   });
 });

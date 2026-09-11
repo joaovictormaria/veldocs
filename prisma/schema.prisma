@@ -503,6 +503,8 @@ model Subscription {
   id               String             @id @default(uuid(7)) @db.Uuid
   companyId        String             @unique @map("company_id") @db.Uuid
   status           SubscriptionStatus @default(TRIALING)
+  /// Kit escolhido no Builder; nulo quando a empresa contratou só módulos avulsos (DEC-024).
+  kitKey           String?            @map("kit_key") @db.VarChar(60)
   /// Início e fim do trial de 14 dias (MASTER SPEC 2.8).
   trialStartedAt   DateTime?          @map("trial_started_at") @db.Timestamptz(3)
   trialEndsAt      DateTime?          @map("trial_ends_at") @db.Timestamptz(3)
@@ -518,6 +520,8 @@ model Subscription {
   updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  kit Kit? @relation(fields: [kitKey], references: [key], onDelete: Restrict)
 
   @@index([status])
   @@index([trialEndsAt])
@@ -536,8 +540,9 @@ model Kit {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  modules KitModule[]
-  prices  KitPrice[]
+  modules       KitModule[]
+  prices        KitPrice[]
+  subscriptions Subscription[]
 
   @@map("kits")
 }

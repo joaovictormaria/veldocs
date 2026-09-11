@@ -3,7 +3,7 @@ import type { AccessControlRepository, EntitlementService } from "@/application/
 import type { IdentityRepository } from "@/application/ports/identity-repository";
 import type { MfaRepository } from "@/application/ports/mfa";
 import { requiresMfa } from "@/domain/access-control/mfa-policy";
-import { moduleOfPermission } from "@/domain/access-control/permission-modules";
+import { bypassesSubscription, moduleOfPermission } from "@/domain/access-control/permission-modules";
 import type { CatalogPermission } from "@/domain/access-control/system-roles";
 import type { TenantContext } from "@/domain/shared/tenant-context";
 
@@ -66,9 +66,12 @@ export function createAuthorizer(deps: {
 
     if (!access.permissions.includes(permission)) return { ok: false, reason: "forbidden" };
 
-    // Assinatura inválida bloqueia tudo, Core incluído (DEC-022).
-    const entitlement = await deps.entitlements.checkModule(companyId, moduleOfPermission(permission));
-    if (entitlement !== "enabled") return { ok: false, reason: entitlement };
+    // Assinatura inválida bloqueia tudo, Core incluído (DEC-022) — exceto as
+    // permissões de assinatura, que são o caminho para assinar ou reativar.
+    if (!bypassesSubscription(permission)) {
+      const entitlement = await deps.entitlements.checkModule(companyId, moduleOfPermission(permission));
+      if (entitlement !== "enabled") return { ok: false, reason: entitlement };
+    }
 
     return {
       ok: true,
