@@ -3,7 +3,7 @@ import { createAuthorizer } from "@/application/access/authorize";
 import { createCompanyQueries } from "@/application/access/company-queries";
 import { createSelectActiveCompany } from "@/application/access/select-active-company";
 import { createSessionManager } from "@/application/auth/session-manager";
-import type { CompanyDirectory } from "@/application/ports/access-control";
+import type { CompanyDirectory, EntitlementCheck } from "@/application/ports/access-control";
 import {
   createFakeAccess,
   createFakeAudit,
@@ -22,7 +22,7 @@ const context = { ipAddress: "203.0.113.10", userAgent: "teste" };
 async function setup(
   options: {
     activeCompanyId?: string | null;
-    entitlementsEnabled?: boolean;
+    entitlement?: EntitlementCheck;
     mfa?: { confirmed?: boolean; secret?: string };
   } = {},
 ) {
@@ -32,7 +32,7 @@ async function setup(
   const store = createInMemorySessions();
   const sessions = createSessionManager({ sessions: store.repository, tokens: createFakeTokens(), now: clock.now });
   const access = createFakeAccess();
-  const entitlements = createFakeEntitlements(options.entitlementsEnabled ?? true);
+  const entitlements = createFakeEntitlements(options.entitlement ?? "enabled");
   const mfa = createFakeMfa(options.mfa ?? {});
   const { audit, events } = createFakeAudit();
 
@@ -119,10 +119,18 @@ describe("authorize", () => {
   });
 
   it("recusa quando o módulo da permissão não está ativo para a empresa", async () => {
-    const { authorize, access, user, token } = await setup({ entitlementsEnabled: false });
+    const { authorize, access, user, token } = await setup({ entitlement: "module_not_enabled" });
     access.grant(user.userId, COMPANY_A);
 
     await expect(authorize(token, "company.read")).resolves.toEqual({ ok: false, reason: "module_not_enabled" });
+  });
+
+  it("recusa com motivo próprio quando a assinatura da empresa não está válida", async () => {
+    const { authorize, access, entitlements, user, token } = await setup({ entitlement: "subscription_inactive" });
+    access.grant(user.userId, COMPANY_A);
+
+    await expect(authorize(token, "company.read")).resolves.toEqual({ ok: false, reason: "subscription_inactive" });
+    expect(entitlements.checks).toEqual([`${COMPANY_A}:core`]);
   });
 
   it.each(["OWNER", "ADMIN"])("perfil %s sem segundo fator cadastrado é recusado", async (roleKey) => {

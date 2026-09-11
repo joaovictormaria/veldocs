@@ -1,40 +1,42 @@
 import type { EntitlementService } from "@/application/ports/access-control";
 import { isCoreModule } from "@/domain/billing/module-catalog";
-import { effectiveStatus, grantsPaidModules } from "@/domain/billing/subscription-status";
+import { effectiveStatus, grantsAccess } from "@/domain/billing/subscription-status";
 import type { PrismaClient } from "@/generated/prisma/client";
 
 /**
  * Entitlement real (MASTER SPEC 17.2): empresa → assinatura → módulos ativos.
  *
- * O Core nunca depende da assinatura. Ele é obrigatório (2.2) e a spec (2.9)
- * exige que, com o trial vencido, a empresa continue vendo seus dados e tenha
- * caminho para reativar — o bloqueio atinge só os módulos pagos.
+ * Ordem das regras:
+ * 1. Assinatura existente e inválida (trial vencido, atraso, cancelada ou
+ *    suspensa): bloqueia TUDO, Core incluído. Os dados não são tocados
+ *    (DEC-022, decisão do usuário).
+ * 2. Core: liberado. Inclui a empresa SEM assinatura — ela ainda não passou
+ *    pelo Builder, onde o trial começa. Bloquear esse caso trancaria toda
+ *    conta recém-criada (e todas as que já existem).
+ * 3. Módulo pago: exige assinatura válida e contratação ativa.
  */
 export function createDatabaseEntitlementService(
   prisma: PrismaClient,
   now: () => Date = () => new Date(),
 ): EntitlementService {
   return {
-    async isModuleEnabled(companyId, moduleKey) {
-      if (isCoreModule(moduleKey)) return true;
+    async checkModule(companyId, moduleKey) {
+      const subscription = await prisma.subscription.findUnique({
+        where: { companyId },
+        select: { status: true, trialEndsAt: true, reactivatedAt: true },
+      });
 
-      const [companyModule, subscription] = await Promise.all([
-        prisma.companyModule.findUnique({
-          where: { companyId_moduleKey: { companyId, moduleKey } },
-          select: { status: true },
-        }),
-        prisma.subscription.findUnique({
-          where: { companyId },
-          select: { status: true, trialEndsAt: true, reactivatedAt: true },
-        }),
-      ]);
+      if (subscription && !grantsAccess(effectiveStatus(subscription, now()))) {
+        return "subscription_inactive";
+      }
+      if (isCoreModule(moduleKey)) return "enabled";
+      if (!subscription) return "module_not_enabled";
 
-      if (companyModule?.status !== "ACTIVE") return false;
-      // Módulo contratado sem assinatura não é utilizável: o trial começa no
-      // Builder e é ele que cria a assinatura.
-      if (!subscription) return false;
-
-      return grantsPaidModules(effectiveStatus(subscription, now()));
+      const companyModule = await prisma.companyModule.findUnique({
+        where: { companyId_moduleKey: { companyId, moduleKey } },
+        select: { status: true },
+      });
+      return companyModule?.status === "ACTIVE" ? "enabled" : "module_not_enabled";
     },
   };
 }

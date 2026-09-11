@@ -14,6 +14,11 @@ const RESPONSES: Record<AuthorizationFailure, { status: number; error: string; m
     error: "module_not_enabled",
     message: "Este recurso não está ativo no plano da empresa.",
   },
+  subscription_inactive: {
+    status: 403,
+    error: "subscription_inactive",
+    message: "A assinatura da empresa não está ativa. Seus dados estão guardados: assine para voltar a usar.",
+  },
   mfa_enrollment_required: {
     status: 403,
     error: "mfa_enrollment_required",

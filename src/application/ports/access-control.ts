@@ -15,11 +15,17 @@ export interface AccessControlRepository {
 }
 
 /**
- * Entitlement: o módulo está contratado/ativo para a empresa?
- * Até a FASE 3 só existe o Core, obrigatório e sempre ativo.
+ * Resultado do entitlement:
+ * - `enabled`: pode usar;
+ * - `module_not_enabled`: o módulo não está contratado/ativo para a empresa;
+ * - `subscription_inactive`: a assinatura existe mas não é válida (trial
+ *   vencido, atraso, cancelada ou suspensa) e TUDO fica bloqueado, Core
+ *   incluído — os dados continuam guardados (DEC-022).
  */
+export type EntitlementCheck = "enabled" | "module_not_enabled" | "subscription_inactive";
+
 export interface EntitlementService {
-  isModuleEnabled(companyId: string, moduleKey: ModuleKey): Promise<boolean>;
+  checkModule(companyId: string, moduleKey: ModuleKey): Promise<EntitlementCheck>;
 }
 
 export interface CompanySummary {

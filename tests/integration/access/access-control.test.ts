@@ -205,7 +205,7 @@ describe("cadeia de autorização com PostgreSQL", () => {
       identity: createPrismaIdentityRepository(prisma),
       access: createPrismaAccessControlRepository(prisma),
       mfa: createPrismaMfaRepository(prisma, TEST_APPLICATION_KEYS),
-      entitlements: { isModuleEnabled: async () => false },
+      entitlements: { checkModule: async () => "module_not_enabled" },
     });
 
     await expect(authorize(owner.session.token, "company.read")).resolves.toEqual({
