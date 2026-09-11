@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { AuthServices } from "@/infrastructure/composition/auth-services";
 import { createFieldEncryptor } from "@/infrastructure/security/crypto";
-import { totpCode, totpStep } from "@/infrastructure/security/totp";
+import { TOTP_PERIOD_SECONDS, totpCode, totpStep } from "@/infrastructure/security/totp";
 import {
   TEST_APPLICATION_KEYS,
   createTestAuthServices,
@@ -21,9 +21,20 @@ beforeAll(() => {
   prisma = createTestPrismaClient();
 });
 
+/**
+ * Relógio congelado no MEIO de um passo TOTP de 30 s. Com o relógio real, o
+ * teste que confirma com o código do passo anterior (`-1`) falhava quando o
+ * passo virava entre gerar o código e o servidor verificar: a diferença
+ * chegava a dois passos, fora da janela de ±1. Congelado, código e
+ * verificação usam sempre o mesmo instante.
+ */
+const TOTP_STEP_MS = TOTP_PERIOD_SECONDS * 1000;
+let now: Date;
+
 beforeEach(async () => {
   await truncateAllTables(prisma);
-  auth = createTestAuthServices(prisma);
+  now = new Date(Math.floor(Date.now() / TOTP_STEP_MS) * TOTP_STEP_MS + TOTP_STEP_MS / 2);
+  auth = createTestAuthServices(prisma, () => now);
 });
 
 afterAll(async () => {
@@ -44,7 +55,8 @@ async function registerOwner() {
   return result;
 }
 
-const currentCode = (secret: string, offsetSteps = 0) => totpCode(secret, totpStep(new Date()) + offsetSteps);
+/** Código do passo do relógio congelado — o mesmo instante que o servidor usa para verificar. */
+const currentCode = (secret: string, offsetSteps = 0) => totpCode(secret, totpStep(now) + offsetSteps);
 
 describe("segundo fator (TOTP)", () => {
   it("cadastra, confirma, guarda o segredo cifrado e entrega códigos de recuperação", async () => {
