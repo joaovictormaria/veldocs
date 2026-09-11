@@ -1,0 +1,14 @@
+# Artefatos locais que nunca devem entrar na imagem.
+node_modules
+.next
+src/generated
+test-results
+playwright-report
+.git
+.github
+.env
+.env.*
+!.env.example
+docs
+*.md
+!README.md
