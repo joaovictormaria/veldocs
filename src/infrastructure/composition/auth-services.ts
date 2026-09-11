@@ -64,6 +64,7 @@ export function buildAuthServices(prisma: PrismaClient, keys: ApplicationKeys, n
     }),
     selectActiveCompany: createSelectActiveCompany({ sessions, identity, access, audit }),
     company: createCompanyQueries(createPrismaCompanyDirectory(prisma)),
+    rateLimiter: dependencies.rateLimiter,
     mfa: createMfaUseCases({ ...dependencies, mfa, service: createMfaService() }),
   };
 }

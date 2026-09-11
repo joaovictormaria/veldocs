@@ -2,6 +2,12 @@ import Image from "next/image";
 import { BRAND_ASSETS } from "@/presentation/brand";
 import { PRODUCT_IDENTITY } from "@/presentation/product-identity";
 
+/**
+ * A CSP usa nonce por requisição (src/proxy.ts), e o nonce só pode ser
+ * aplicado aos scripts com renderização dinâmica.
+ */
+export const dynamic = "force-dynamic";
+
 export default function HomePage() {
   return (
     <main className="foundation">
