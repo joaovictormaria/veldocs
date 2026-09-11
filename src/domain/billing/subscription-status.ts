@@ -1,0 +1,114 @@
+/**
+ * Estados da assinatura (MASTER SPEC 2.8 e 2.9).
+ *
+ * O banco guarda o estado CANÔNICO — aquele que só muda por uma ação
+ * (contratar, cancelar, suspender, pagamento pendente). Os estados do trial
+ * que dependem apenas da passagem do tempo (`TRIAL_EXPIRING` e
+ * `TRIAL_EXPIRED`) são DERIVADOS da data de término a cada leitura, e não
+ * gravados: assim não é preciso um processo agendado virando linhas de hora
+ * em hora, e não existe a janela em que o banco diz "em trial" enquanto o
+ * prazo já venceu.
+ */
+
+/** Estado gravado no banco. */
+export const SUBSCRIPTION_STATUSES = [
+  "TRIALING",
+  "ACTIVE",
+  "PAYMENT_PENDING",
+  "PAST_DUE",
+  "CANCELED",
+  "SUSPENDED",
+] as const;
+export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
+
+/** Estado apresentado ao cliente, já considerando o tempo decorrido. */
+export const EFFECTIVE_STATUSES = [
+  "TRIAL_ACTIVE",
+  "TRIAL_EXPIRING",
+  "TRIAL_EXPIRED",
+  "ACTIVE",
+  "REACTIVATED",
+  "PAYMENT_PENDING",
+  "PAST_DUE",
+  "CANCELED",
+  "SUSPENDED",
+] as const;
+export type EffectiveStatus = (typeof EFFECTIVE_STATUSES)[number];
+
+export const TRIAL_DAYS = 14;
+/** A partir daqui o trial é apresentado como "terminando" (MASTER SPEC 2.8). */
+export const TRIAL_EXPIRING_DAYS = 3;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export interface SubscriptionState {
+  readonly status: SubscriptionStatus;
+  readonly trialEndsAt: Date | null;
+  /** Preenchido quando uma assinatura cancelada/suspensa volta a valer. */
+  readonly reactivatedAt: Date | null;
+}
+
+export function trialEndFrom(startedAt: Date, days = TRIAL_DAYS): Date {
+  return new Date(startedAt.getTime() + days * DAY_MS);
+}
+
+/** Dias inteiros restantes (0 quando já terminou). Só faz sentido em trial. */
+export function trialDaysRemaining(trialEndsAt: Date | null, now: Date): number | null {
+  if (!trialEndsAt) return null;
+  return Math.max(0, Math.ceil((trialEndsAt.getTime() - now.getTime()) / DAY_MS));
+}
+
+export function effectiveStatus(state: SubscriptionState, now: Date): EffectiveStatus {
+  if (state.status !== "TRIALING") {
+    return state.status === "ACTIVE" && state.reactivatedAt ? "REACTIVATED" : state.status;
+  }
+
+  // Trial sem data de término não expira sozinho; trata-se como ativo.
+  if (!state.trialEndsAt) return "TRIAL_ACTIVE";
+
+  const remainingMs = state.trialEndsAt.getTime() - now.getTime();
+  if (remainingMs <= 0) return "TRIAL_EXPIRED";
+  return remainingMs <= TRIAL_EXPIRING_DAYS * DAY_MS ? "TRIAL_EXPIRING" : "TRIAL_ACTIVE";
+}
+
+/**
+ * Estados em que os módulos PAGOS continuam utilizáveis.
+ *
+ * O Core nunca depende disto: a spec (2.9) exige que a empresa continue
+ * acessando seus dados e tenha caminho para reativar, então o bloqueio atinge
+ * apenas os módulos contratados.
+ *
+ * `PAST_DUE` bloqueia — é inadimplência já reconhecida; `PAYMENT_PENDING`
+ * libera, porque o pagamento está em processamento. A política definitiva de
+ * inadimplência (carência, bloqueio de escrita) é decisão comercial pendente.
+ */
+const GRANTS_PAID_MODULES: ReadonlySet<EffectiveStatus> = new Set<EffectiveStatus>([
+  "TRIAL_ACTIVE",
+  "TRIAL_EXPIRING",
+  "ACTIVE",
+  "REACTIVATED",
+  "PAYMENT_PENDING",
+]);
+
+export function grantsPaidModules(status: EffectiveStatus): boolean {
+  return GRANTS_PAID_MODULES.has(status);
+}
+
+/** Transições permitidas do estado canônico. */
+const ALLOWED_TRANSITIONS: Readonly<Record<SubscriptionStatus, readonly SubscriptionStatus[]>> = {
+  TRIALING: ["ACTIVE", "PAYMENT_PENDING", "CANCELED", "SUSPENDED"],
+  PAYMENT_PENDING: ["ACTIVE", "PAST_DUE", "CANCELED", "SUSPENDED"],
+  ACTIVE: ["PAYMENT_PENDING", "PAST_DUE", "CANCELED", "SUSPENDED"],
+  PAST_DUE: ["ACTIVE", "PAYMENT_PENDING", "CANCELED", "SUSPENDED"],
+  CANCELED: ["ACTIVE", "PAYMENT_PENDING"],
+  SUSPENDED: ["ACTIVE", "PAYMENT_PENDING", "CANCELED"],
+};
+
+export function canTransition(from: SubscriptionStatus, to: SubscriptionStatus): boolean {
+  return ALLOWED_TRANSITIONS[from].includes(to);
+}
+
+/** Voltar de CANCELED/SUSPENDED para ACTIVE conta como reativação (2.9). */
+export function isReactivation(from: SubscriptionStatus, to: SubscriptionStatus): boolean {
+  return to === "ACTIVE" && (from === "CANCELED" || from === "SUSPENDED");
+}
