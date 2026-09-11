@@ -32,6 +32,9 @@ services:
   app:
     build:
       context: .
+      # Fora da raiz de propósito: o Railway detecta um Dockerfile na raiz e
+      # passa a construir por ele em vez do nixpacks, quebrando o deploy.
+      dockerfile: docker/Dockerfile
       target: dev
     container_name: veldocs-app
     restart: unless-stopped

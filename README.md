@@ -337,8 +337,10 @@ pnpm docker:down   # encerra tudo
 
 Para apenas executar sem sincronizar o código, use `pnpm docker:up` (em segundo plano).
 
-O código **não** é montado do host: em Windows o watcher de arquivos não é confiável através de bind mount, então o código vai na imagem e o `watch` mantém o container em dia. O `Dockerfile` também tem o alvo `runner`, com build de produção, para conferir localmente o que roda no Railway:
+O código **não** é montado do host: em Windows o watcher de arquivos não é confiável através de bind mount, então o código vai na imagem e o `watch` mantém o container em dia.
+
+O arquivo fica em [`docker/Dockerfile`](./docker/Dockerfile), e **não** na raiz: o Railway detecta um `Dockerfile` na raiz e passa a construir por ele em vez do nixpacks. Ele também tem o alvo `runner`, com build de produção, para conferir localmente:
 
 ```bash
-docker build --target runner -t veldocs-prod . && docker run --rm --env-file .env -p 3000:3000 veldocs-prod
+docker build -f docker/Dockerfile --target runner -t veldocs-prod . && docker run --rm --env-file .env -p 3000:3000 veldocs-prod
 ```
