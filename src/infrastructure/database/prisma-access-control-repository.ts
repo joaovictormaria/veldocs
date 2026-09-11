@@ -63,7 +63,7 @@ export function createPrismaCompanyDirectory(prisma: PrismaClient): CompanyDirec
     findCompany(companyId) {
       return prisma.company.findFirst({
         where: { id: companyId, deletedAt: null },
-        select: { id: true, name: true, legalName: true, slug: true, status: true, createdAt: true },
+        select: { id: true, name: true, legalName: true, taxId: true, slug: true, status: true, createdAt: true },
       });
     },
 

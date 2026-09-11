@@ -26,6 +26,8 @@ export interface CompanySummary {
   readonly id: string;
   readonly name: string;
   readonly legalName: string | null;
+  /** CNPJ, somente dígitos. */
+  readonly taxId: string | null;
   readonly slug: string;
   readonly status: "ACTIVE" | "SUSPENDED";
   readonly createdAt: Date;

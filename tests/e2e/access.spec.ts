@@ -1,38 +1,6 @@
-import { randomInt, randomUUID } from "node:crypto";
-import { type APIRequestContext, expect, request as playwrightRequest, test } from "@playwright/test";
-import { totpCode, totpStep } from "../../src/infrastructure/security/totp";
-
-const ORIGIN = `http://localhost:${process.env.E2E_PORT ?? 3000}`;
-
-/** IP aleatório por requisição: o limite de cadastros por IP persiste no banco entre execuções. */
-const headers = () => ({ Origin: ORIGIN, "X-Forwarded-For": `10.${randomInt(256)}.${randomInt(256)}.${randomInt(256)}` });
-
-async function signup(api: APIRequestContext, companyName: string) {
-  const account = {
-    name: "Pessoa E2E",
-    email: `acesso-${randomUUID().slice(0, 12)}@example.com`,
-    password: "uma frase longa e secreta",
-    companyName,
-  };
-  const response = await api.post("/api/auth/signup", { data: account, headers: headers() });
-  expect(response.status()).toBe(201);
-  return { account, ...((await response.json()) as { userId: string; companyId: string }) };
-}
-
-/** OWNER só acessa as rotas depois de cadastrar o app autenticador. */
-async function enrollMfa(api: APIRequestContext) {
-  const start = await api.post("/api/auth/mfa/enroll", { headers: headers() });
-  expect(start.status()).toBe(200);
-  const { secret, keyUri } = (await start.json()) as { secret: string; keyUri: string };
-  expect(decodeURIComponent(keyUri)).toContain("otpauth://totp/VELDOCS:");
-
-  const code = totpCode(secret, totpStep(new Date()));
-  const confirm = await api.post("/api/auth/mfa/enroll/confirm", { data: { code }, headers: headers() });
-  expect(confirm.status()).toBe(200);
-  const { recoveryCodes } = (await confirm.json()) as { recoveryCodes: string[] };
-  expect(recoveryCodes).toHaveLength(10);
-  return { secret, code, recoveryCodes };
-}
+import { randomUUID } from "node:crypto";
+import { expect, request as playwrightRequest, test } from "@playwright/test";
+import { enrollMfa, headers, signup } from "./support/session";
 
 test("OWNER precisa do segundo fator antes de acessar as rotas da empresa", async ({ request }) => {
   const owner = await signup(request, "Empresa Alfa E2E");
