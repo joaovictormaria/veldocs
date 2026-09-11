@@ -15,8 +15,14 @@ describe("módulo de cada permissão", () => {
     }
   });
 
-  it("antes da FASE 3 todas as permissões pertencem ao Core", () => {
-    expect(MODULE_KEYS).toEqual([CORE_MODULE_KEY]);
+  it("as permissões existentes são todas do Core", () => {
+    // As capacidades dos módulos pagos ainda não existem; quando existirem,
+    // cada uma trará suas permissões e este teste deixa de valer.
     expect(new Set(Object.values(PERMISSION_MODULE))).toEqual(new Set([CORE_MODULE_KEY]));
+  });
+
+  it("as chaves de módulo vêm do catálogo comercial", () => {
+    expect(MODULE_KEYS[0]).toBe(CORE_MODULE_KEY);
+    expect(MODULE_KEYS.length).toBeGreaterThan(1);
   });
 });

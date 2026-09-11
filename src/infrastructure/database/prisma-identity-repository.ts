@@ -1,5 +1,6 @@
 import { AccountAlreadyExistsError } from "@/application/auth/shared";
 import type { IdentityRepository, UserCredentials } from "@/application/ports/identity-repository";
+import { CORE_MODULE_KEY } from "@/domain/billing/module-catalog";
 import type { PrismaClient } from "@/generated/prisma/client";
 
 const isUniqueViolation = (error: unknown) =>
@@ -78,6 +79,12 @@ export function createPrismaIdentityRepository(prisma: PrismaClient): IdentityRe
               await tx.userRole.create({ data: { companyId: company.id, userId: user.id, roleId: created.id } });
             }
           }
+
+          // O Core é obrigatório e acompanha toda empresa nova (MASTER SPEC
+          // 2.2). Os módulos pagos e o trial são escolhidos depois, no Builder.
+          await tx.companyModule.create({
+            data: { companyId: company.id, moduleKey: CORE_MODULE_KEY, status: "ACTIVE" },
+          });
 
           return { userId: user.id, companyId: company.id };
         });

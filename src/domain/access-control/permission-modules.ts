@@ -1,15 +1,17 @@
+import { CORE_MODULE_KEY, MODULE_KEYS, type ModuleKey } from "@/domain/billing/module-catalog";
 import type { CatalogPermission } from "./system-roles";
 
 /**
  * Módulo ao qual cada permissão pertence (MASTER SPEC: tenant → RBAC →
- * entitlement → recurso). O catálogo comercial de módulos — preços,
- * dependências e ativação por empresa — pertence à FASE 3; aqui fica apenas
- * a associação que o código usa para exigir o entitlement correto.
+ * entitlement → recurso). As chaves vêm do catálogo comercial
+ * (`domain/billing/module-catalog.ts`); aqui fica só a associação que o
+ * código usa para exigir o entitlement correto.
+ *
+ * Todas as permissões de hoje são do Core: as capacidades dos módulos pagos
+ * (vencimentos, funcionários, contratos...) ainda não existem e ganharão suas
+ * permissões nas fases em que forem implementadas.
  */
-export const CORE_MODULE_KEY = "core";
-
-export const MODULE_KEYS = [CORE_MODULE_KEY] as const;
-export type ModuleKey = (typeof MODULE_KEYS)[number];
+export { CORE_MODULE_KEY, MODULE_KEYS, type ModuleKey };
 
 /** Declarado explicitamente: toda permissão nova precisa informar seu módulo. */
 export const PERMISSION_MODULE = {

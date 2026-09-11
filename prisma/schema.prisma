@@ -66,6 +66,8 @@ model Company {
   documentCategories DocumentCategory[]
   documents          Document[]
   auditLogs          AuditLog[]
+  modules            CompanyModule[]
+  subscription       Subscription?
 
   @@map("companies")
 }
@@ -379,4 +381,141 @@ model RateLimitBucket {
 
   @@index([resetAt])
   @@map("rate_limit_buckets")
+}
+
+// =============================================================================
+// CATÁLOGO COMERCIAL (MASTER SPEC 2.2 a 2.9)
+// -----------------------------------------------------------------------------
+// `modules`, `module_dependencies` e `module_prices` são GLOBAIS: descrevem o
+// produto, não uma empresa. O que é por tenant são `company_modules` (módulos
+// contratados) e `subscriptions` (assinatura/trial).
+// =============================================================================
+
+/// Situação do módulo no catálogo (não confundir com contratação por empresa).
+enum ModuleStatus {
+  /// Pode ser contratado.
+  AVAILABLE
+  /// Aparece no Builder, mas ainda não pode ser contratado.
+  COMING_SOON
+  /// Fora do catálogo; empresas que já têm continuam com ele.
+  RETIRED
+}
+
+enum CompanyModuleStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum BillingPeriod {
+  MONTHLY
+  YEARLY
+}
+
+/// Estado canônico da assinatura. Os estados do trial que dependem só do tempo
+/// (TRIAL_EXPIRING/TRIAL_EXPIRED) são derivados em leitura a partir de
+/// `trial_ends_at` — ver src/domain/billing/subscription-status.ts.
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAYMENT_PENDING
+  PAST_DUE
+  CANCELED
+  SUSPENDED
+}
+
+model Module {
+  /// Chave estável usada no código e nos entitlements (ex.: "vencimentos").
+  key         String       @id @db.VarChar(60)
+  name        String       @db.VarChar(120)
+  description String
+  /// Frase de benefício exibida no Builder.
+  benefit     String       @db.VarChar(255)
+  /// O Core é obrigatório e não pode ser desativado (MASTER SPEC 2.2).
+  isCore      Boolean      @default(false) @map("is_core")
+  status      ModuleStatus @default(AVAILABLE)
+  /// Ordem de exibição no Builder.
+  sortOrder   Int          @map("sort_order")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  dependencies   ModuleDependency[] @relation("ModuleRequires")
+  requiredBy     ModuleDependency[] @relation("ModuleRequiredBy")
+  prices         ModulePrice[]
+  companyModules CompanyModule[]
+
+  @@map("modules")
+}
+
+/// "moduleKey depende de dependsOnKey" (MASTER SPEC 2.6).
+model ModuleDependency {
+  moduleKey    String @map("module_key") @db.VarChar(60)
+  dependsOnKey String @map("depends_on_key") @db.VarChar(60)
+
+  module    Module @relation("ModuleRequires", fields: [moduleKey], references: [key], onDelete: Cascade)
+  dependsOn Module @relation("ModuleRequiredBy", fields: [dependsOnKey], references: [key], onDelete: Restrict)
+
+  @@id([moduleKey, dependsOnKey])
+  @@index([dependsOnKey])
+  @@map("module_dependencies")
+}
+
+/// Preço vigente por módulo. Histórico preservado: um preço novo fecha o
+/// anterior com `valid_until` em vez de sobrescrevê-lo.
+/// Módulo sem preço vigente = preço ainda não definido comercialmente.
+model ModulePrice {
+  id            String        @id @default(uuid(7)) @db.Uuid
+  moduleKey     String        @map("module_key") @db.VarChar(60)
+  /// Em centavos, para não usar ponto flutuante com dinheiro.
+  amountCents   Int           @map("amount_cents")
+  currency      String        @default("BRL") @db.VarChar(3)
+  billingPeriod BillingPeriod @default(MONTHLY) @map("billing_period")
+  validFrom     DateTime      @map("valid_from") @db.Timestamptz(3)
+  validUntil    DateTime?     @map("valid_until") @db.Timestamptz(3)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  module Module @relation(fields: [moduleKey], references: [key], onDelete: Restrict)
+
+  @@index([moduleKey, validFrom])
+  @@map("module_prices")
+}
+
+/// Módulo contratado por uma empresa (entitlement).
+model CompanyModule {
+  companyId     String              @map("company_id") @db.Uuid
+  moduleKey     String              @map("module_key") @db.VarChar(60)
+  status        CompanyModuleStatus @default(ACTIVE)
+  activatedAt   DateTime            @default(now()) @map("activated_at") @db.Timestamptz(3)
+  deactivatedAt DateTime?           @map("deactivated_at") @db.Timestamptz(3)
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  module  Module  @relation(fields: [moduleKey], references: [key], onDelete: Restrict)
+
+  @@id([companyId, moduleKey])
+  @@index([companyId, status])
+  @@map("company_modules")
+}
+
+/// Assinatura da empresa. Uma por empresa.
+model Subscription {
+  id               String             @id @default(uuid(7)) @db.Uuid
+  companyId        String             @unique @map("company_id") @db.Uuid
+  status           SubscriptionStatus @default(TRIALING)
+  /// Início e fim do trial de 14 dias (MASTER SPEC 2.8).
+  trialStartedAt   DateTime?          @map("trial_started_at") @db.Timestamptz(3)
+  trialEndsAt      DateTime?          @map("trial_ends_at") @db.Timestamptz(3)
+  /// Fim do período pago corrente.
+  currentPeriodEnd DateTime?          @map("current_period_end") @db.Timestamptz(3)
+  canceledAt       DateTime?          @map("canceled_at") @db.Timestamptz(3)
+  /// Preenchido quando uma assinatura cancelada/suspensa volta a valer (2.9).
+  reactivatedAt    DateTime?          @map("reactivated_at") @db.Timestamptz(3)
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@index([status])
+  @@index([trialEndsAt])
+  @@map("subscriptions")
 }

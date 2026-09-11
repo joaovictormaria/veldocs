@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { AuthorizationFailure } from "@/application/access/authorize";
-import { createCoreOnlyEntitlementService } from "@/infrastructure/access/core-only-entitlements";
 import { authorizationFailureResponse } from "@/infrastructure/http/authorization-responses";
 
 describe("respostas de autorização", () => {
@@ -17,14 +16,5 @@ describe("respostas de autorização", () => {
     const body = (await response.json()) as { error: string; message: string };
     expect(body.error).toBe(reason);
     expect(body.message.length).toBeGreaterThan(0);
-  });
-});
-
-describe("entitlements provisórios (até a FASE 3)", () => {
-  it("Core sempre ativo; qualquer outro módulo negado", async () => {
-    const service = createCoreOnlyEntitlementService();
-
-    await expect(service.isModuleEnabled("empresa", "core")).resolves.toBe(true);
-    await expect(service.isModuleEnabled("empresa", "whatsapp" as never)).resolves.toBe(false);
   });
 });

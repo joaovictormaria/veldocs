@@ -9,7 +9,7 @@ import { createRegisterUseCase } from "@/application/auth/register";
 import { createSessionManager } from "@/application/auth/session-manager";
 import { createSessionUseCases } from "@/application/auth/session-use-cases";
 import type { PrismaClient } from "@/generated/prisma/client";
-import { createCoreOnlyEntitlementService } from "@/infrastructure/access/core-only-entitlements";
+import { createDatabaseEntitlementService } from "@/infrastructure/access/database-entitlements";
 import { getEnv } from "@/infrastructure/config/env";
 import {
   createPrismaAccessControlRepository,
@@ -62,7 +62,7 @@ export function buildAuthServices(prisma: PrismaClient, keys: ApplicationKeys, n
       identity,
       access,
       mfa,
-      entitlements: createCoreOnlyEntitlementService(),
+      entitlements: createDatabaseEntitlementService(prisma, now),
     }),
     selectActiveCompany: createSelectActiveCompany({ sessions, identity, access, audit }),
     company: createCompanyQueries(createPrismaCompanyDirectory(prisma)),

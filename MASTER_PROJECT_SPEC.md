@@ -591,7 +591,8 @@ Nunca permitir acesso cruzado.
   - Testes: `tests/integration/access/company-management.test.ts` e `tests/e2e/company-management.spec.ts` — passaram.
 - 🔴 NÃO IMPLEMENTADO — Storage possui isolamento lógico por tenant (o contrato `StorageProvider` já exige `companyId`).
 - ✅ CONCLUÍDO — Testes de cross-tenant existem: nível banco (17 testes), autorização e consultas com PostgreSQL (IDOR, empresa sem vínculo, vínculo e empresa suspensos) e E2E das rotas (membro de outra empresa → 404; seleção de empresa alheia → 404) — passaram. Estender a cada novo recurso.
-- 🔴 NÃO IMPLEMENTADO — Entitlements são associados ao tenant (FASE 3).
+- ✅ CONCLUÍDO — Entitlements são associados ao tenant: `company_modules` e `subscriptions` têm `company_id NOT NULL` e a verificação é sempre por `(empresa, módulo)`.
+  - Testes: `tests/integration/database/connection-and-migrations.test.ts` e `tests/integration/access/entitlements.test.ts` (o entitlement de uma empresa não vale para outra) — passaram.
 
 ---
 
@@ -1163,6 +1164,8 @@ Permissões funcionais
 
 A desativação de um módulo deve bloquear suas capacidades conforme a política comercial, sem destruir dados automaticamente.
 
+**Status (2026-09-11):** 🟡 PARCIAL — a relação empresa → assinatura → módulos ativos → entitlements existe no banco e na cadeia de autorização (DEC-022); módulo desativado fica bloqueado sem apagar dados. Faltam a ativação/desativação pelo Builder e as permissões funcionais dos módulos pagos.
+
 ---
 
 # 18. UPSELL E EXPANSÃO
@@ -1281,7 +1284,7 @@ As recomendações devem ser:
 
 ## FASE 3 — Empresa, usuários e módulos comerciais
 
-**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada; a segunda (catálogo comercial, Builder, preços e trial) depende de decisões do usuário. Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
+**Status da fase:** 🟡 PARCIAL. A primeira metade (estrutura da empresa) está implementada. Da segunda, já existem o catálogo de módulos, os entitlements por empresa e os estados do trial no backend; faltam o Builder, o preço em tempo real, o início do trial e as decisões comerciais (preços, kits, inadimplência). Observação: o cadastro atual cria empresa e sessão diretamente; no modelo modular ele deverá levar ao Builder, e o catálogo de permissões deverá ser associado aos módulos.
 
 - ✅ CONCLUÍDO — Empresas (entidade, criação no cadastro e edição dos dados cadastrais com CNPJ validado)
   - Evidência: `PATCH /api/company` (`company.update`), `src/application/access/manage-company.ts`, `src/domain/company/cnpj.ts`; auditoria `company.updated`.
@@ -1293,11 +1296,19 @@ As recomendações devem ser:
 - 🟡 PARCIAL — Usuários (pessoa global e vínculos; convites pendentes)
 - 🟡 PARCIAL — Roles (5 perfis padrão por empresa)
 - 🟡 PARCIAL — Permissions (catálogo de 18 permissões)
-- 🔴 NÃO IMPLEMENTADO — Catálogo de módulos
-- 🔴 NÃO IMPLEMENTADO — Entitlements (a cadeia de autorização já verifica o módulo de cada permissão; falta o registro de módulos contratados por empresa)
+- 🟡 PARCIAL — Catálogo de módulos
+  - Evidência: os 17 módulos da seção 2.3 em `src/domain/billing/module-catalog.ts`, povoados pela migração `commercial_catalog_and_subscriptions` (DEC-023); tabelas `modules`, `module_dependencies` e `module_prices`. Teste de integração compara banco × domínio.
+  - Pendente: preços (tabela pronta, vazia até a definição comercial), kits e dependências além do Core.
+- ✅ CONCLUÍDO — Entitlements (verificação na cadeia de autorização)
+  - Evidência: `company_modules` por empresa; `src/infrastructure/access/database-entitlements.ts` substitui o provisório "só Core"; o Core é sempre liberado e provisionado no cadastro; módulo pago exige contratação ativa **e** assinatura que conceda acesso (DEC-022).
+  - Testes: `tests/integration/access/entitlements.test.ts` (trial vigente e vencido, módulo não contratado ou desativado, sem assinatura, PAST_DUE/CANCELED/SUSPENDED, isolamento entre empresas, FK do catálogo, Core no cadastro) — passaram (local, 2026-09-11).
+  - Observação: nenhuma permissão pertence ainda a módulo pago — as capacidades desses módulos são de fases futuras, e o bloqueio passa a valer automaticamente quando existirem. Ativar e desativar módulos é parte do Builder.
 - 🔴 NÃO IMPLEMENTADO — Builder
-- 🔴 NÃO IMPLEMENTADO — Preço em tempo real
-- 🔴 NÃO IMPLEMENTADO — Trial state machine
+- 🔴 NÃO IMPLEMENTADO — Preço em tempo real (depende dos preços comerciais)
+- 🟡 PARCIAL — Trial state machine
+  - Evidência: `src/domain/billing/subscription-status.ts` — 14 dias, estados da seção 2.8 (canônicos no banco e derivados do tempo na leitura — DEC-022), transições permitidas e reativação; tabela `subscriptions`.
+  - Testes: `tests/unit/domain/billing/subscription-status.test.ts` — passou.
+  - Pendente: início do trial pelo Builder e transições acionadas por cobrança (FASE 16).
 
 ## FASE 4 — Núcleo documental
 
@@ -1589,19 +1600,49 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 
 ---
 
+## DEC-022 — Estados do trial derivados do tempo
+
+**Status:** ✅ CONCLUÍDO (implementado na FASE 3)
+
+**Decisão:** o banco guarda só o estado **canônico** da assinatura — o que muda por uma ação: `TRIALING`, `ACTIVE`, `PAYMENT_PENDING`, `PAST_DUE`, `CANCELED`, `SUSPENDED`. Os estados da seção 2.8 que dependem apenas do tempo (`TRIAL_ACTIVE`, `TRIAL_EXPIRING`, `TRIAL_EXPIRED`) e `REACTIVATED` são **derivados na leitura**, a partir de `trial_ends_at` e `reactivated_at`.
+
+**Motivo:** gravar "trial expirado" exigiria um processo agendado virando linhas, e entre duas execuções o banco diria "em trial" com o prazo já vencido. Derivando, o estado é sempre exato e não há nada a agendar.
+
+**Política de acesso aos módulos pagos:** liberados em `TRIAL_ACTIVE`, `TRIAL_EXPIRING`, `ACTIVE`, `REACTIVATED` e `PAYMENT_PENDING`; bloqueados em `TRIAL_EXPIRED`, `PAST_DUE`, `CANCELED` e `SUSPENDED`. O **Core nunca é bloqueado**, para cumprir a seção 2.9 (dados preservados e caminho de reativação). "Terminando" = últimos 3 dias.
+
+**Pendente (decisão comercial):** carência na inadimplência (`PAST_DUE` hoje bloqueia na hora) e se o trial vencido deve bloquear também escrita no Core.
+
+**Evidência:** `src/domain/billing/subscription-status.ts`, `src/infrastructure/access/database-entitlements.ts`; `tests/unit/domain/billing/subscription-status.test.ts` e `tests/integration/access/entitlements.test.ts` — passaram.
+
+---
+
+## DEC-023 — Catálogo de módulos versionado em migração, sem preços
+
+**Status:** ✅ CONCLUÍDO (implementado na FASE 3)
+
+**Decisão:** os 17 módulos da seção 2.3 são povoados pela própria migração `commercial_catalog_and_subscriptions`, espelhando `src/domain/billing/module-catalog.ts`; um teste de integração compara as linhas do banco com o domínio. `module_prices` nasce **vazia**: módulo sem preço vigente significa "preço ainda não definido".
+
+**Motivo:** a seção 2.3 diz que os preços serão definidos comercialmente depois, mas que o sistema deve nascer preparado; e a 2.5 exige que o preço venha do backend. Povoar pela migração garante que produção, testes e desenvolvimento tenham exatamente o mesmo catálogo, aplicado pelo `migrate deploy` que já roda no pre-deploy.
+
+**Consequências:** mudar o catálogo exige uma nova migração. Dependências entre módulos existem como mecanismo (`module_dependencies`, `withDependencies`), mas nenhuma foi declarada: a spec (2.6) só cita "WhatsApp depende de Gestão documental", que é Core.
+
+**Evidência:** migração `20260911033935_commercial_catalog_and_subscriptions`; `tests/unit/domain/billing/module-catalog.test.ts` e `tests/integration/access/entitlements.test.ts` — passaram.
+
+---
+
 # 24. STATUS GERAL
 
 **Produto:** ✅ CONCLUÍDO (definição e identidade visual; vetores da logo pendentes)
-**Arquitetura:** ✅ CONCLUÍDO (monólito modular em camadas; entitlements ainda não existem)
+**Arquitetura:** ✅ CONCLUÍDO (monólito modular em camadas; entitlements por empresa na cadeia de autorização)
 **Segurança:** 🟡 PARCIAL (autenticação, sessão, CPF protegido, rate limit, CSRF, empresa ativa, RBAC, MFA para OWNER/ADMIN, CSP com nonce, HSTS e logs estruturados; verificação de e-mail e recuperação de senha no backlog)
 **Frontend:** 🔴 NÃO IMPLEMENTADO (somente página inicial da fundação)
-**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; sem módulos de negócio)
-**Banco:** 🟡 PARCIAL (entidades de identidade, empresa, acesso, documentos e auditoria; faltam Module, ModulePrice, Entitlement, Subscription e Trial)
+**Backend:** 🟡 PARCIAL (autenticação, empresa ativa, autorização, consultas da empresa e dos membros e gestão de empresa, filiais e setores; catálogo comercial e entitlements por empresa; sem módulos de negócio)
+**Banco:** 🟡 PARCIAL (identidade, empresa, acesso, documentos, auditoria, catálogo comercial, módulos por empresa e assinatura; preços ainda não cadastrados)
 **Storage:** 🔴 NÃO IMPLEMENTADO
 **Billing:** 🔴 NÃO IMPLEMENTADO
 **WhatsApp:** 🔴 NÃO IMPLEMENTADO
 **IA:** 🔴 NÃO IMPLEMENTADO
-**Testes:** 🟡 PARCIAL (281 unitários, 90 integração, 23 E2E; CI bloqueando o deploy)
+**Testes:** 🟡 PARCIAL (305 unitários, 104 integração, 23 E2E; CI bloqueando o deploy)
 
 ## Bloqueadores
 
@@ -1610,7 +1651,7 @@ Motivo: marca própria do VELDOCS conectada ao ecossistema VELNOX.IA. Paleta `#3
 - **Arquivos vetoriais da logo (SVG):** não bloqueia; os recortes raster atuais atendem a página e os ícones.
 
 - ⏳ **Proteção da branch `main`**: exige GitHub Pro ou repositório público.
-- Decisões comerciais para a FASE 3: módulos iniciais do catálogo, preços, dependências, kits e regras do trial.
+- Decisões comerciais pendentes da FASE 3: preços dos módulos, kits, dependências além do Core, carência na inadimplência e se o trial vencido bloqueia também a escrita no Core. O catálogo e os estados do trial seguem a seção 2 e já estão implementados.
 - Decisões pendentes sem bloqueio imediato: unicidade de CNPJ entre empresas, retenção de `audit_logs` × LGPD, adoção de RLS, rotação de chaves.
 
 ## Regra final
@@ -1825,3 +1866,57 @@ Verificação em produção: após o merge e o deploy.
 - Os ajudantes de sessão do E2E (`signup`, `enrollMfa`) foram extraídos para `tests/e2e/support/session.ts` e são usados pelas duas specs.
 - A segunda metade da FASE 3 (catálogo de módulos, preços, dependências, kits, trial de 14 dias e Builder) continua bloqueada por decisões comerciais do usuário.
 - Gestão de membros, convites e atribuição de perfis ainda não foi feita: é o próximo passo dentro desta metade.
+
+---
+
+## 2026-09-11 — FASE 3 (segunda metade, parte 1): catálogo de módulos, entitlements e estados do trial
+
+### O que foi feito
+
+| Item | Evidência |
+|---|---|
+| Catálogo | `src/domain/billing/module-catalog.ts`: os 17 módulos da seção 2.3 (Core obrigatório e 16 contratáveis), com nome, descrição, benefício e resolução de dependências |
+| Banco | migração `20260911033935_commercial_catalog_and_subscriptions`: `modules`, `module_dependencies`, `module_prices`, `company_modules` e `subscriptions`; povoa o catálogo e dá o Core às empresas já existentes (DEC-023) |
+| Estados do trial | `src/domain/billing/subscription-status.ts`: 14 dias, "terminando" nos últimos 3, estado canônico gravado e estados do tempo derivados na leitura (DEC-022), transições permitidas e reativação |
+| Entitlements | `src/infrastructure/access/database-entitlements.ts` substitui o provisório "só Core" na cadeia de autorização: Core sempre liberado; módulo pago exige contratação ativa e assinatura que conceda acesso |
+| Cadastro | empresa nova nasce com o Core em `company_modules` e sem assinatura — o trial começa no Builder (seção 2.4) |
+| Testes de integração | a limpeza entre testes passou a preservar as tabelas povoadas pela migração; sem isso, qualquer cadastro falharia pela FK do Core |
+
+### Testes (local)
+
+| Suíte | Resultado |
+|---|---|
+| `pnpm lint` / `tsc --noEmit` | ✅ sem erros |
+| `pnpm test` | ✅ 25 arquivos, 305 testes (novos: catálogo, estados e transições do trial) |
+| `pnpm test:integration` | ✅ 8 arquivos, 104 testes (novos: banco × catálogo, entitlement por estado da assinatura, isolamento entre empresas, FK do catálogo, Core no cadastro) |
+| `pnpm test:e2e` | ✅ 23 testes |
+| `pnpm build` | ✅ |
+
+Verificação em produção: após o merge e o deploy (a migração roda no pre-deploy).
+
+### Observações
+
+- Nenhuma permissão pertence ainda a módulo pago: as capacidades desses módulos são de fases futuras. O entitlement já é verificado e passa a bloquear automaticamente quando elas existirem.
+- `module_prices` está pronta e vazia: os preços dependem de decisão comercial (seção 2.3).
+- Faltam nesta metade: Builder, preço em tempo real e início do trial.
+
+---
+
+## 2026-09-11 — Docker local e incidente de deploy
+
+### O que foi feito
+
+| Item | Evidência |
+|---|---|
+| Docker | `docker/Dockerfile` (alvos `dev` e `runner`) e serviço `app` no `docker-compose.yml`; `pnpm docker:dev` usa `docker compose watch` |
+| Verificação | executada **de dentro do container**: health 200 (banco e migrações `up`), cadastro 201 com o Core gravado no banco, rota criada no host servida pelo container em ~4 s e 404 depois de removida |
+
+### Incidente
+
+- O PR #10 colocou o `Dockerfile` na raiz. O Railway detecta esse arquivo e passou a construir por ele em vez do nixpacks: o deploy `5b7f79f2` falhou no build. Produção não caiu — seguiu na versão anterior.
+- Correção no PR #11: arquivo movido para `docker/Dockerfile`. Deploy `a00dbfa3` SUCCESS; health, rotas da FASE 3 e página verificadas em produção.
+
+### Observações
+
+- As primeiras verificações do Docker por `localhost:3000` foram atendidas por um `next dev` órfão no host, que escutava também em IPv6, e não pelo container. Foram refeitas de dentro do container, depois de encerrar o processo órfão.
+- No Windows, encerrar um comando em segundo plano pode deixar processos filhos vivos (`pnpm` → `next`, `docker compose watch`). Conferir portas e processos antes de dar uma verificação por concluída.

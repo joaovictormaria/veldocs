@@ -16,29 +16,39 @@ const APPLICATION_TABLES = [
   "audit_logs",
   "branches",
   "companies",
+  "company_modules",
   "departments",
   "document_categories",
   "documents",
   "memberships",
+  "module_dependencies",
+  "module_prices",
+  "modules",
   "permissions",
   "rate_limit_buckets",
   "role_permissions",
   "roles",
   "sessions",
+  "subscriptions",
   "user_recovery_codes",
   "user_roles",
   "user_totp_credentials",
   "users",
 ].sort();
 
-/** Tabelas de dados empresariais: company_id obrigatório. */
+/**
+ * Tabelas de dados empresariais: company_id obrigatório.
+ * O catálogo (`modules`, `module_dependencies`, `module_prices`) é global.
+ */
 const TENANT_SCOPED_TABLES = [
   "branches",
+  "company_modules",
   "departments",
   "document_categories",
   "documents",
   "memberships",
   "roles",
+  "subscriptions",
   "user_roles",
 ];
 
