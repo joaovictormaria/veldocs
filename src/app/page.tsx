@@ -31,6 +31,20 @@ export default function HomePage() {
           Entrar
         </Link>
       </div>
+      <a
+        href="https://portifolio.velnoxia.com.br"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="group mt-16 inline-flex items-center gap-2.5 self-start rounded-full border border-slate-300 py-2 pl-4 pr-2 text-xs text-slate-500 transition hover:border-brand-primary dark:border-slate-700 dark:text-slate-400"
+      >
+        <span className="whitespace-nowrap">Site desenvolvido por</span>
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-brand-primary px-3 py-1.5 font-bold text-white">
+          João Victor Maria
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5">
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </span>
+      </a>
     </main>
   );
 }
